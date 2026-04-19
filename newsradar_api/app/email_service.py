@@ -26,14 +26,16 @@ async def send_email(to_email: str, subject: str, body: str, html_body: str = No
             message.attach(html_part)
 
         # Send email
-        await aiosmtplib.send(
-            message,
-            hostname=settings.SMTP_HOST,
-            port=settings.SMTP_PORT,
-            username=settings.SMTP_USER,
-            password=settings.SMTP_PASSWORD,
-            use_tls=False,
-        )
+        smtp_kwargs = {
+            "hostname": settings.SMTP_HOST,
+            "port": settings.SMTP_PORT,
+            "use_tls": False,
+        }
+        if settings.SMTP_USER and settings.SMTP_PASSWORD:
+            smtp_kwargs["username"] = settings.SMTP_USER
+            smtp_kwargs["password"] = settings.SMTP_PASSWORD
+
+        await aiosmtplib.send(message, **smtp_kwargs)
         logger.info(f"Email sent successfully to {to_email}")
         return True
     except Exception as e:
@@ -43,7 +45,7 @@ async def send_email(to_email: str, subject: str, body: str, html_body: str = No
 
 async def send_verification_email(to_email: str, verification_token: str):
     """Send email verification link"""
-    verification_link = f"http://localhost:3000/verify?token={verification_token}"
+    verification_link = f"http://localhost:8000/api/v1/auth/verify?token={verification_token}"
     
     subject = "Verify your NewsRadar account"
     body = f"""
@@ -73,50 +75,88 @@ async def send_verification_email(to_email: str, verification_token: str):
     return await send_email(to_email, subject, body, html_body)
 
 
-async def send_alert_notification(to_email: str, alert_name: str, statistics: Dict):
-    """Send alert notification with processing statistics"""
-    timestamp = statistics.get("timestamp", "")
-    news_count = statistics.get("news_count", 0)
+async def send_cycle_summary(to_email: str, alert_name: str, timestamp_display: str, matched_news: list, statistics: dict):
+    """Send a single summary email per alert after each processing cycle"""
+    subject = f"Actualización de alerta: {alert_name} en {timestamp_display}"
+
+    news_processed = statistics.get("news_processed", 0)
+    matches_count = statistics.get("matches_count", 0)
+    feeds_ok = statistics.get("feeds_ok", 0)
+    feeds_ko = statistics.get("feeds_ko", 0)
     sources = statistics.get("sources", [])
-    
-    subject = f"NewsRadar Alert: {alert_name} - {timestamp}"
-    
+    matched_keywords = statistics.get("matched_keywords", [])
+
+    # Build matched news list for the body
+    def _source_name(n):
+        try:
+            return n.rss_channel.information_source.name
+        except Exception:
+            return ""
+
+    news_lines = "\n".join(
+        f"- {n.title} ({_source_name(n)}) [{', '.join(n.matched_keywords or [])}] {n.link}"
+        for n in matched_news
+    )
+
     body = f"""
-    Alert Update: {alert_name}
-    Time: {timestamp}
-    
-    Processing Statistics:
-    - News items found: {news_count}
-    - Sources monitored: {len(sources)}
-    
-    News sources:
-    {chr(10).join(f"- {source}" for source in sources)}
-    
-    Visit NewsRadar dashboard to see full details.
+Actualización de {alert_name} en {timestamp_display}
+
+Estadísticas del ciclo:
+- Noticias procesadas: {news_processed}
+- Matches en esta alerta: {matches_count}
+- Feeds OK: {feeds_ok}
+- Feeds KO: {feeds_ko}
+- Keywords coincidentes: {', '.join(matched_keywords)}
+- Fuentes con matches: {', '.join(sources)}
+
+Noticias coincidentes:
+{news_lines}
     """
-    
+
+    # First 20 always visible
+    visible_items = "".join(
+        f'<li><a href="{n.link}">{n.title}</a> ({_source_name(n)}) [{", ".join(n.matched_keywords or [])}]</li>'
+        for n in matched_news[:20]
+    )
+
+    # Remaining inside a collapsible <details> block
+    extra_section = ""
+    if len(matched_news) > 20:
+        hidden_items = "".join(
+            f'<li><a href="{n.link}">{n.title}</a> ({_source_name(n)}) [{", ".join(n.matched_keywords or [])}]</li>'
+            for n in matched_news[20:]
+        )
+        extra_section = f"""
+            <details>
+                <summary style="cursor:pointer;color:#2196F3;font-weight:bold;">
+                    Ver {len(matched_news) - 20} noticias más...
+                </summary>
+                <ul>{hidden_items}</ul>
+            </details>"""
+
     html_body = f"""
     <html>
         <body>
-            <h2>Alert Update: {alert_name}</h2>
-            <p><strong>Time:</strong> {timestamp}</p>
-            
-            <h3>Processing Statistics</h3>
-            <ul>
-                <li>News items found: {news_count}</li>
-                <li>Sources monitored: {len(sources)}</li>
-            </ul>
-            
-            <h3>News Sources</h3>
-            <ul>
-                {''.join(f"<li>{source}</li>" for source in sources)}
-            </ul>
-            
-            <p><a href="http://localhost:3000/dashboard">Visit NewsRadar Dashboard</a></p>
+            <h2>Actualización de {alert_name}</h2>
+            <p><strong>Fecha:</strong> {timestamp_display}</p>
+
+            <h3>Estadísticas del ciclo</h3>
+            <table style="border-collapse:collapse;" border="1" cellpadding="6">
+                <tr><td>Noticias procesadas</td><td><strong>{news_processed}</strong></td></tr>
+                <tr><td>Matches en esta alerta</td><td><strong>{matches_count}</strong></td></tr>
+                <tr><td>Feeds OK</td><td><strong>{feeds_ok}</strong></td></tr>
+                <tr><td>Feeds KO</td><td><strong>{feeds_ko}</strong></td></tr>
+                <tr><td>Keywords coincidentes</td><td>{', '.join(matched_keywords)}</td></tr>
+                <tr><td>Fuentes con matches</td><td>{', '.join(sources)}</td></tr>
+            </table>
+
+            <h3>Noticias coincidentes ({matches_count})</h3>
+            <ul>{visible_items}</ul>
+            {extra_section}
         </body>
     </html>
     """
-    
+
     return await send_email(to_email, subject, body, html_body)
 
 

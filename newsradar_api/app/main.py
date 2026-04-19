@@ -104,6 +104,24 @@ async def register(
     return user
 
 
+@app.get(f"{API_PREFIX}/auth/verify", tags=["auth"])
+def verify_email(token: str, db: Session = Depends(get_db)):
+    """Verify user email with token"""
+    user = db.query(models.User).filter(models.User.verification_token == token).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid verification token")
+
+    if user.verification_token_expires and user.verification_token_expires.replace(tzinfo=None) < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Verification token has expired")
+
+    user.is_verified = True
+    user.verification_token = None
+    user.verification_token_expires = None
+    db.commit()
+
+    return {"message": "Email verified successfully"}
+
+
 @app.post(f"{API_PREFIX}/auth/login", response_model=schemas.Token, tags=["auth"])
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """Login and get access token (OAuth2 compatible)"""
@@ -224,7 +242,9 @@ def create_source(
     current_user: models.User = Depends(require_manager)
 ):
     """Create a new information source (Manager only)"""
-    source = models.InformationSource(**source_data.model_dump())
+    data = source_data.model_dump()
+    data["url"] = str(data["url"])
+    source = models.InformationSource(**data)
     db.add(source)
     db.commit()
     db.refresh(source)
@@ -275,9 +295,11 @@ def create_rss_channel(
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
     
+    data = channel_data.model_dump()
+    data["url"] = str(data["url"])
     channel = models.RSSChannel(
         information_source_id=source_id,
-        **channel_data.model_dump()
+        **data
     )
     db.add(channel)
     db.commit()
@@ -316,11 +338,18 @@ def create_alert(
     if alert_count >= settings.MAX_ALERTS_PER_USER:
         raise HTTPException(status_code=400, detail=f"Maximum {settings.MAX_ALERTS_PER_USER} alerts per user")
     
+    # Validate category_code if provided
+    category_code = alert_data.category_code
+    if category_code:
+        valid = db.query(models.Category).filter(models.Category.code == category_code).first()
+        if not valid:
+            category_code = None
+
     alert = models.Alert(
         user_id=user_id,
         name=alert_data.name,
         keywords=alert_data.keywords,
-        category_code=alert_data.category_code,
+        category_code=category_code,
         cron_expression=alert_data.cron_expression,
         notify_email=alert_data.notify_email,
         notify_inbox=alert_data.notify_inbox
