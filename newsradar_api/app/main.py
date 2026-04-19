@@ -487,18 +487,46 @@ def get_news_item(
 def list_notifications(
     user_id: int,
     alert_id: int,
+    unread_only: bool = False,
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    """List notifications for an alert"""
+    """List notifications for an alert. Use unread_only=true to filter unread."""
     if current_user.id != user_id:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
-    return db.query(models.Notification).filter(
+
+    query = db.query(models.Notification).filter(
         models.Notification.alert_id == alert_id
-    ).order_by(models.Notification.created_at.desc()).offset(skip).limit(limit).all()
+    )
+    if unread_only:
+        query = query.filter(models.Notification.is_read == False)
+
+    return query.order_by(models.Notification.created_at.desc()).offset(skip).limit(limit).all()
+
+
+@app.patch(f"{API_PREFIX}/users/{{user_id}}/notifications/{{notification_id}}/read", response_model=schemas.Notification, tags=["notifications"])
+def mark_notification_read(
+    user_id: int,
+    notification_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Mark a notification as read"""
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    notification = db.query(models.Notification).filter(
+        models.Notification.id == notification_id
+    ).first()
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+
+    notification.is_read = True
+    db.commit()
+    db.refresh(notification)
+    return notification
 
 
 # ==================== SYNONYMS ====================

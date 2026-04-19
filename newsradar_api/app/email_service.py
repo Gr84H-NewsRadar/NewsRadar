@@ -93,10 +93,14 @@ async def send_cycle_summary(to_email: str, alert_name: str, timestamp_display: 
         except Exception:
             return ""
 
-    news_lines = "\n".join(
-        f"- {n.title} ({_source_name(n)}) [{', '.join(n.matched_keywords or [])}] {n.link}"
-        for n in matched_news
-    )
+    def _news_line(n):
+        source = _source_name(n)
+        keywords = ', '.join(n.matched_keywords or [])
+        date = n.published_date.strftime("%d/%m/%Y %H:%M") if n.published_date else "sin fecha"
+        summary = (n.description[:120] + "...") if n.description and len(n.description) > 120 else (n.description or "")
+        return f"- {n.title} ({source}) [{keywords}] ({date})\n  {summary}\n  {n.link}"
+
+    news_lines = "\n".join(_news_line(n) for n in matched_news)
 
     body = f"""
 Actualización de {alert_name} en {timestamp_display}
@@ -113,19 +117,26 @@ Noticias coincidentes:
 {news_lines}
     """
 
+    def _news_html(n):
+        source = _source_name(n)
+        keywords = ", ".join(n.matched_keywords or [])
+        date = n.published_date.strftime("%d/%m/%Y %H:%M") if n.published_date else "sin fecha"
+        summary = (n.description[:200] + "...") if n.description and len(n.description) > 200 else (n.description or "")
+        return (
+            f'<li style="margin-bottom:10px;">'
+            f'<a href="{n.link}"><strong>{n.title}</strong></a><br/>'
+            f'<small>{source} &middot; {date} &middot; [{keywords}]</small><br/>'
+            f'<span style="color:#555;">{summary}</span>'
+            f'</li>'
+        )
+
     # First 20 always visible
-    visible_items = "".join(
-        f'<li><a href="{n.link}">{n.title}</a> ({_source_name(n)}) [{", ".join(n.matched_keywords or [])}]</li>'
-        for n in matched_news[:20]
-    )
+    visible_items = "".join(_news_html(n) for n in matched_news[:20])
 
     # Remaining inside a collapsible <details> block
     extra_section = ""
     if len(matched_news) > 20:
-        hidden_items = "".join(
-            f'<li><a href="{n.link}">{n.title}</a> ({_source_name(n)}) [{", ".join(n.matched_keywords or [])}]</li>'
-            for n in matched_news[20:]
-        )
+        hidden_items = "".join(_news_html(n) for n in matched_news[20:])
         extra_section = f"""
             <details>
                 <summary style="cursor:pointer;color:#2196F3;font-weight:bold;">
