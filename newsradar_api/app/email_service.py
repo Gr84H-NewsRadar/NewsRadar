@@ -120,6 +120,55 @@ async def send_alert_notification(to_email: str, alert_name: str, statistics: Di
     return await send_email(to_email, subject, body, html_body)
 
 
+async def send_cycle_summary(to_email: str, alert_name: str, stats: Dict):
+    """Send one email per processing cycle summarizing matches for an alert."""
+    timestamp = stats.get("timestamp", "")
+    matches = stats.get("matches", [])
+    subject = f"NewsRadar Alert: {alert_name} - {timestamp}"
+
+    matches_text = "\n".join(
+        f"- {m['title']} ({m['source']}) [{', '.join(m['keywords'])}] {m['link']}"
+        for m in matches
+    ) or "- (sin coincidencias)"
+
+    body = f"""Actualización de alerta: {alert_name}
+Hora: {timestamp}
+
+Estadísticas del ciclo:
+- Noticias procesadas: {stats.get('news_processed', 0)}
+- Matches en esta alerta: {stats.get('matches_count', 0)}
+- Feeds OK: {stats.get('feeds_ok', 0)}
+- Feeds KO: {stats.get('feeds_ko', 0)}
+
+Noticias coincidentes:
+{matches_text}
+"""
+
+    matches_html = "".join(
+        f"<li><a href='{m['link']}'>{m['title']}</a> <em>({m['source']})</em> "
+        f"— <strong>{', '.join(m['keywords'])}</strong></li>"
+        for m in matches
+    ) or "<li>(sin coincidencias)</li>"
+
+    html_body = f"""
+    <html><body>
+        <h2>Actualización de alerta: {alert_name}</h2>
+        <p><strong>Hora:</strong> {timestamp}</p>
+        <h3>Estadísticas del ciclo</h3>
+        <ul>
+            <li>Noticias procesadas: {stats.get('news_processed', 0)}</li>
+            <li>Matches en esta alerta: {stats.get('matches_count', 0)}</li>
+            <li>Feeds OK: {stats.get('feeds_ok', 0)}</li>
+            <li>Feeds KO: {stats.get('feeds_ko', 0)}</li>
+        </ul>
+        <h3>Noticias coincidentes</h3>
+        <ul>{matches_html}</ul>
+    </body></html>
+    """
+
+    return await send_email(to_email, subject, body, html_body)
+
+
 async def send_password_reset_email(to_email: str, reset_token: str):
     """Send password reset link"""
     reset_link = f"http://localhost:3000/reset-password?token={reset_token}"
