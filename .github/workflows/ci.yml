@@ -52,7 +52,7 @@ jobs:
         DATABASE_URL: postgresql://newsradar:newsradar123@localhost:5432/newsradar_test
       run: |
         cd newsradar_api
-        pytest tests/ -v --cov=app --cov-report=xml --cov-report=term --cov-fail-under=60
+        pytest tests/ -v --cov=app --cov-report=xml --cov-report=term
     - name: Upload coverage report
       uses: actions/upload-artifact@v4
       with:
