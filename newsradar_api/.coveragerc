@@ -1,0 +1,5 @@
+[run]
+omit =
+    app/rss_processor.py
+    app/email_service.py
+    app/init_db.py
