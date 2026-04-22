@@ -91,7 +91,7 @@ jobs:
         ruff check app | tee ../quality-reports/ruff.txt
 
         # Code smells and duplication metric
-        pylint app --disable=C0114,C0115,C0116 --enable=E,F,R0801 --fail-under=${PYLINT_MIN_SCORE} | tee ../quality-reports/pylint.txt
+        pylint app --rcfile=.pylintrc --fail-under=${PYLINT_MIN_SCORE} | tee ../quality-reports/pylint.txt
 
         # Complexity metric report
         radon cc app -s -a | tee ../quality-reports/radon-cc.txt
