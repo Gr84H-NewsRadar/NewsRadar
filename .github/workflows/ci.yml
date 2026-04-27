@@ -26,7 +26,7 @@ jobs:
         cd newsradar_api
         ruff check app
         black --check app
-        isort --check-only app
+        isort --check-only app --profile black
 
   test:
     runs-on: ubuntu-latest

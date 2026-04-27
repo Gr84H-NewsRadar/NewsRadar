@@ -1,9 +1,11 @@
 from typing import Optional
+
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     """Application configuration settings."""
+
     # Database
     DATABASE_URL: str = "sqlite:///./newsradar.db"
 
@@ -31,6 +33,7 @@ class Settings(BaseSettings):
 
     class Config:
         """Pydantic config."""
+
         env_file = ".env"
 
 
