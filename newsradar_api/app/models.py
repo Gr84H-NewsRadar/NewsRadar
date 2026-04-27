@@ -1,21 +1,34 @@
-from sqlalchemy import Boolean, Column, Integer, String, DateTime, ForeignKey, Table, Text, JSON
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    Text,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+
 from app.database import Base
 
 # Association tables
 user_roles = Table(
-    'user_roles',
+    "user_roles",
     Base.metadata,
-    Column('user_id', Integer, ForeignKey('users.id', ondelete='CASCADE')),
-    Column('role_id', Integer, ForeignKey('roles.id', ondelete='CASCADE'))
+    Column("user_id", Integer, ForeignKey("users.id", ondelete="CASCADE")),
+    Column("role_id", Integer, ForeignKey("roles.id", ondelete="CASCADE")),
 )
 
 alert_rss_channels = Table(
-    'alert_rss_channels',
+    "alert_rss_channels",
     Base.metadata,
-    Column('alert_id', Integer, ForeignKey('alerts.id', ondelete='CASCADE')),
-    Column('rss_channel_id', Integer, ForeignKey('rss_channels.id', ondelete='CASCADE'))
+    Column("alert_id", Integer, ForeignKey("alerts.id", ondelete="CASCADE")),
+    Column(
+        "rss_channel_id", Integer, ForeignKey("rss_channels.id", ondelete="CASCADE")
+    ),
 )
 
 
@@ -70,7 +83,9 @@ class InformationSource(Base):
     url = Column(String(500), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    rss_channels = relationship("RSSChannel", back_populates="information_source", cascade="all, delete-orphan")
+    rss_channels = relationship(
+        "RSSChannel", back_populates="information_source", cascade="all, delete-orphan"
+    )
 
 
 class RSSChannel(Base):
@@ -78,15 +93,21 @@ class RSSChannel(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     url = Column(String(500), nullable=False)
-    information_source_id = Column(Integer, ForeignKey("information_sources.id", ondelete="CASCADE"))
+    information_source_id = Column(
+        Integer, ForeignKey("information_sources.id", ondelete="CASCADE")
+    )
     category_id = Column(Integer, ForeignKey("categories.id", ondelete="CASCADE"))
     is_active = Column(Boolean, default=True)
     last_fetched = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    information_source = relationship("InformationSource", back_populates="rss_channels")
+    information_source = relationship(
+        "InformationSource", back_populates="rss_channels"
+    )
     category = relationship("Category", back_populates="rss_channels")
-    alerts = relationship("Alert", secondary=alert_rss_channels, back_populates="rss_channels")
+    alerts = relationship(
+        "Alert", secondary=alert_rss_channels, back_populates="rss_channels"
+    )
     news_items = relationship("NewsItem", back_populates="rss_channel")
 
 
@@ -106,8 +127,12 @@ class Alert(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     user = relationship("User", back_populates="alerts")
-    rss_channels = relationship("RSSChannel", secondary=alert_rss_channels, back_populates="alerts")
-    notifications = relationship("Notification", back_populates="alert", cascade="all, delete-orphan")
+    rss_channels = relationship(
+        "RSSChannel", secondary=alert_rss_channels, back_populates="alerts"
+    )
+    notifications = relationship(
+        "Notification", back_populates="alert", cascade="all, delete-orphan"
+    )
     matched_news = relationship("NewsItem", back_populates="alert")
 
 
@@ -120,8 +145,12 @@ class NewsItem(Base):
     description = Column(Text, nullable=True)
     published_date = Column(DateTime(timezone=True), nullable=True)
     rss_channel_id = Column(Integer, ForeignKey("rss_channels.id", ondelete="CASCADE"))
-    category_id = Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True)
-    alert_id = Column(Integer, ForeignKey("alerts.id", ondelete="SET NULL"), nullable=True)
+    category_id = Column(
+        Integer, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
+    )
+    alert_id = Column(
+        Integer, ForeignKey("alerts.id", ondelete="SET NULL"), nullable=True
+    )
     matched_keywords = Column(JSON, nullable=True)  # Keywords that matched
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

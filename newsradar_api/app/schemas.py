@@ -1,9 +1,10 @@
 from datetime import datetime
 from typing import List, Optional
+
 from pydantic import BaseModel, EmailStr, Field, HttpUrl
 
-
 # ==================== TOKEN ====================
+
 
 class Token(BaseModel):
     access_token: str
@@ -21,12 +22,14 @@ class LoginRequest(BaseModel):
 
 # ==================== METRIC (usado por Notification y Stats) ====================
 
+
 class Metric(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     value: float
 
 
 # ==================== ROLES ====================
+
 
 class RoleBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
@@ -48,6 +51,7 @@ class Role(RoleBase):
 
 
 # ==================== USERS ====================
+
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -82,6 +86,7 @@ class User(UserBase):
 
 # ==================== CATEGORIES ====================
 
+
 class CategoryBase(BaseModel):
     # El profe NO incluye 'code' en el schema externo, solo 'name' y 'source'
     name: str = Field(..., min_length=1, max_length=120)
@@ -107,6 +112,7 @@ class Category(CategoryBase):
 
 # ==================== INFORMATION SOURCES ====================
 
+
 class InformationSourceBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
     url: HttpUrl
@@ -129,6 +135,7 @@ class InformationSource(InformationSourceBase):
 
 
 # ==================== RSS CHANNELS ====================
+
 
 class RSSChannelBase(BaseModel):
     url: HttpUrl
@@ -159,6 +166,7 @@ class RSSChannel(RSSChannelBase):
 # ==================== ALERTS ====================
 # IMPORTANTE: el profe usa 'descriptors' (= keywords) y 'categories' (lista de objetos)
 
+
 class AlertCategoryItem(BaseModel):
     code: str = Field(..., min_length=1, max_length=60)
     label: str = Field(..., min_length=1, max_length=120)
@@ -166,8 +174,10 @@ class AlertCategoryItem(BaseModel):
 
 class AlertBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
-    descriptors: List[str] = Field(default_factory=list)          # = keywords internamente
-    categories: List[AlertCategoryItem] = Field(default_factory=list)  # = category_code internamente
+    descriptors: List[str] = Field(default_factory=list)  # = keywords internamente
+    categories: List[AlertCategoryItem] = Field(
+        default_factory=list
+    )  # = category_code internamente
     cron_expression: str = Field(..., min_length=1, max_length=120)
 
 
@@ -202,19 +212,24 @@ class Alert(AlertBase):
         """Convierte un Alert de BD al schema del profe"""
         cats = []
         if alert_orm.category_code:
-            cats = [AlertCategoryItem(code=alert_orm.category_code, label=alert_orm.category_code)]
+            cats = [
+                AlertCategoryItem(
+                    code=alert_orm.category_code, label=alert_orm.category_code
+                )
+            ]
         return cls(
             id=alert_orm.id,
             user_id=alert_orm.user_id,
             name=alert_orm.name,
             descriptors=alert_orm.keywords or [],
             categories=cats,
-            cron_expression=alert_orm.cron_expression or "0 */6 * * *"
+            cron_expression=alert_orm.cron_expression or "0 */6 * * *",
         )
 
 
 # ==================== NOTIFICATIONS ====================
 # IMPORTANTE: el profe usa 'timestamp' y 'metrics: List[Metric]'
+
 
 class NotificationBase(BaseModel):
     timestamp: datetime
@@ -252,12 +267,13 @@ class Notification(NotificationBase):
             id=notif_orm.id,
             alert_id=notif_orm.alert_id,
             timestamp=notif_orm.created_at,
-            metrics=metrics
+            metrics=metrics,
         )
 
 
 # ==================== STATS ====================
 # IMPORTANTE: el profe usa 'metrics: List[Metric]'
+
 
 class StatsBase(BaseModel):
     metrics: List[Metric] = Field(default_factory=list)
@@ -281,16 +297,31 @@ class Stats(StatsBase):
     def from_orm_stats(cls, stats_orm):
         """Convierte ProcessingStats de BD al schema del profe"""
         metrics = [
-            Metric(name="total_feeds_processed", value=float(stats_orm.total_feeds_processed or 0)),
-            Metric(name="total_feeds_failed", value=float(stats_orm.total_feeds_failed or 0)),
-            Metric(name="total_news_items", value=float(stats_orm.total_news_items or 0)),
-            Metric(name="total_alerts_triggered", value=float(stats_orm.total_alerts_triggered or 0)),
-            Metric(name="processing_time_seconds", value=float(stats_orm.processing_time_seconds or 0)),
+            Metric(
+                name="total_feeds_processed",
+                value=float(stats_orm.total_feeds_processed or 0),
+            ),
+            Metric(
+                name="total_feeds_failed",
+                value=float(stats_orm.total_feeds_failed or 0),
+            ),
+            Metric(
+                name="total_news_items", value=float(stats_orm.total_news_items or 0)
+            ),
+            Metric(
+                name="total_alerts_triggered",
+                value=float(stats_orm.total_alerts_triggered or 0),
+            ),
+            Metric(
+                name="processing_time_seconds",
+                value=float(stats_orm.processing_time_seconds or 0),
+            ),
         ]
         return cls(id=stats_orm.id, metrics=metrics)
 
 
 # ==================== SCHEMAS INTERNOS (no expuestos al profe) ====================
+
 
 class NewsItemBase(BaseModel):
     title: str

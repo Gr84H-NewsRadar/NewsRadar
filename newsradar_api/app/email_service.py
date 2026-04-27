@@ -1,9 +1,10 @@
-import aiosmtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from typing import List, Dict
-from app.config import settings
 import logging
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
+import aiosmtplib
+
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +46,10 @@ async def send_email(to_email: str, subject: str, body: str, html_body: str = No
 
 async def send_verification_email(to_email: str, verification_token: str):
     """Send email verification link"""
-    verification_link = f"http://localhost:8000/api/v1/auth/verify?token={verification_token}"
-    
+    verification_link = (
+        f"http://localhost:8000/api/v1/auth/verify?token={verification_token}"
+    )
+
     subject = "Verify your NewsRadar account"
     body = f"""
     Welcome to NewsRadar!
@@ -58,7 +61,7 @@ async def send_verification_email(to_email: str, verification_token: str):
     
     If you didn't create an account, please ignore this email.
     """
-    
+
     html_body = f"""
     <html>
         <body>
@@ -71,11 +74,17 @@ async def send_verification_email(to_email: str, verification_token: str):
         </body>
     </html>
     """
-    
+
     return await send_email(to_email, subject, body, html_body)
 
 
-async def send_cycle_summary(to_email: str, alert_name: str, timestamp_display: str, matched_news: list, statistics: dict):
+async def send_cycle_summary(
+    to_email: str,
+    alert_name: str,
+    timestamp_display: str,
+    matched_news: list,
+    statistics: dict,
+):
     """Send a single summary email per alert after each processing cycle"""
     subject = f"Actualización de alerta: {alert_name} en {timestamp_display}"
 
@@ -95,9 +104,17 @@ async def send_cycle_summary(to_email: str, alert_name: str, timestamp_display: 
 
     def _news_line(n):
         source = _source_name(n)
-        keywords = ', '.join(n.matched_keywords or [])
-        date = n.published_date.strftime("%d/%m/%Y %H:%M") if n.published_date else "sin fecha"
-        summary = (n.description[:120] + "...") if n.description and len(n.description) > 120 else (n.description or "")
+        keywords = ", ".join(n.matched_keywords or [])
+        date = (
+            n.published_date.strftime("%d/%m/%Y %H:%M")
+            if n.published_date
+            else "sin fecha"
+        )
+        summary = (
+            (n.description[:120] + "...")
+            if n.description and len(n.description) > 120
+            else (n.description or "")
+        )
         return f"- {n.title} ({source}) [{keywords}] ({date})\n  {summary}\n  {n.link}"
 
     news_lines = "\n".join(_news_line(n) for n in matched_news)
@@ -120,14 +137,22 @@ Noticias coincidentes:
     def _news_html(n):
         source = _source_name(n)
         keywords = ", ".join(n.matched_keywords or [])
-        date = n.published_date.strftime("%d/%m/%Y %H:%M") if n.published_date else "sin fecha"
-        summary = (n.description[:200] + "...") if n.description and len(n.description) > 200 else (n.description or "")
+        date = (
+            n.published_date.strftime("%d/%m/%Y %H:%M")
+            if n.published_date
+            else "sin fecha"
+        )
+        summary = (
+            (n.description[:200] + "...")
+            if n.description and len(n.description) > 200
+            else (n.description or "")
+        )
         return (
             f'<li style="margin-bottom:10px;">'
             f'<a href="{n.link}"><strong>{n.title}</strong></a><br/>'
-            f'<small>{source} &middot; {date} &middot; [{keywords}]</small><br/>'
+            f"<small>{source} &middot; {date} &middot; [{keywords}]</small><br/>"
             f'<span style="color:#555;">{summary}</span>'
-            f'</li>'
+            f"</li>"
         )
 
     # First 20 always visible
@@ -174,7 +199,7 @@ Noticias coincidentes:
 async def send_password_reset_email(to_email: str, reset_token: str):
     """Send password reset link"""
     reset_link = f"http://localhost:3000/reset-password?token={reset_token}"
-    
+
     subject = "Reset your NewsRadar password"
     body = f"""
     You requested to reset your NewsRadar password.
@@ -186,7 +211,7 @@ async def send_password_reset_email(to_email: str, reset_token: str):
     
     If you didn't request this, please ignore this email.
     """
-    
+
     html_body = f"""
     <html>
         <body>
@@ -199,5 +224,5 @@ async def send_password_reset_email(to_email: str, reset_token: str):
         </body>
     </html>
     """
-    
+
     return await send_email(to_email, subject, body, html_body)

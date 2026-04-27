@@ -1,13 +1,15 @@
 from datetime import datetime, timedelta
 from typing import Optional
-from jose import JWTError, jwt
-from passlib.context import CryptContext
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
+from passlib.context import CryptContext
 from sqlalchemy.orm import Session
+
+from app import models
 from app.config import settings
 from app.database import get_db
-from app import models
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -26,15 +28,21 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.utcnow() + timedelta(
+            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+        )
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    encoded_jwt = jwt.encode(
+        to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
+    )
     return encoded_jwt
 
 
 def decode_access_token(token: str) -> Optional[str]:
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+        )
         email: str = payload.get("sub")
         if email is None:
             return None
@@ -44,30 +52,31 @@ def decode_access_token(token: str) -> Optional[str]:
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
+    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
 ) -> models.User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
+
     email = decode_access_token(token)
     if email is None:
         raise credentials_exception
-    
+
     user = db.query(models.User).filter(models.User.email == email).first()
     if user is None:
         raise credentials_exception
-    
+
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
-    
+
     return user
 
 
-def get_current_active_user(current_user: models.User = Depends(get_current_user)) -> models.User:
+def get_current_active_user(
+    current_user: models.User = Depends(get_current_user),
+) -> models.User:
     if not current_user.is_verified:
         raise HTTPException(status_code=400, detail="Email not verified")
     return current_user
@@ -75,14 +84,17 @@ def get_current_active_user(current_user: models.User = Depends(get_current_user
 
 def is_manager(user: models.User) -> bool:
     """Check if user has manager role"""
-    return any(role.name.lower() in ["manager", "admin", "gestor"] for role in user.roles)
+    return any(
+        role.name.lower() in ["manager", "admin", "gestor"] for role in user.roles
+    )
 
 
-def require_manager(current_user: models.User = Depends(get_current_active_user)) -> models.User:
+def require_manager(
+    current_user: models.User = Depends(get_current_active_user),
+) -> models.User:
     """Dependency to require manager role"""
     if not is_manager(current_user):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Manager role required"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Manager role required"
         )
     return current_user
