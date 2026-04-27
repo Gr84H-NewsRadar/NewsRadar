@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NewsRadar — Login</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body class="bg-dark text-light">
+    <div class="container vh-100 d-flex align-items-center justify-content-center">
+        <div class="card bg-secondary text-light shadow-lg" style="width: 26rem;">
+            <div class="card-body p-4">
+                <div class="text-center mb-4">
+                    <i class="bi bi-broadcast" style="font-size:3rem;"></i>
+                    <h2 class="mt-2" data-i18n="welcome">BIENVENIDO</h2>
+                    <p class="text-muted small" data-i18n="welcome_sub">Accede a tu panel de control</p>
+                </div>
+
+                <div class="alert alert-info py-2 small">
+                    <strong>DEMO:</strong> admin@newsradar.com / admin123
+                </div>
+
+                <div id="login-error" class="alert alert-danger d-none"></div>
+
+                <form id="login-form">
+                    <div class="mb-3">
+                        <label class="form-label small" data-i18n="email">EMAIL</label>
+                        <input type="email" class="form-control" id="email" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small" data-i18n="password">CONTRASEÑA</label>
+                        <input type="password" class="form-control" id="password" required>
+                    </div>
+                    <button type="submit" class="btn btn-light w-100" data-i18n="enter">ENTRAR AL SISTEMA →</button>
+                </form>
+
+                <div class="mt-3 text-center small">
+                    <a href="/static/register.html" class="text-light" data-i18n="no_account">¿No tienes cuenta? Regístrate aquí</a>
+                </div>
+
+                <div class="mt-3 text-center">
+                    <button class="btn btn-sm btn-outline-light" onclick="toggleLanguage()">
+                        <span id="lang-btn">EN</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/i18n.js"></script>
+    <script src="/static/js/api.js"></script>
+    <script>
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const errBox = document.getElementById('login-error');
+            errBox.classList.add('d-none');
+
+            try {
+                const resp = await api.login(email, password);
+                localStorage.setItem('access_token', resp.access_token);
+                const me = await api.getMe();
+                localStorage.setItem('user', JSON.stringify(me));
+                window.location.href = '/static/dashboard.html';
+            } catch (err) {
+                errBox.textContent = err.message || 'Error de autenticación';
+                errBox.classList.remove('d-none');
+            }
+        });
+
+        // Auto-redirect si ya hay sesión
+        if (localStorage.getItem('access_token')) {
+            window.location.href = '/static/dashboard.html';
+        }
+    </script>
+</body>
+</html>
