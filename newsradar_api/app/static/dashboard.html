@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NewsRadar — Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <div class="d-flex">
+        <!-- Sidebar -->
+        <nav id="sidebar" class="bg-dark text-light p-3" style="width:240px;min-height:100vh;">
+            <div class="d-flex align-items-center mb-4">
+                <i class="bi bi-broadcast me-2 fs-4"></i>
+                <h4 class="mb-0">NEWSRADAR</h4>
+            </div>
+            <ul class="nav flex-column">
+                <li class="nav-item"><a href="/static/dashboard.html" class="nav-link text-light active"><i class="bi bi-speedometer2 me-2"></i><span data-i18n="dashboard">Dashboard</span></a></li>
+                <li class="nav-item"><a href="/static/wordcloud.html" class="nav-link text-light"><i class="bi bi-cloud me-2"></i><span data-i18n="resumen">Resumen</span></a></li>
+                <li class="nav-item"><a href="/static/alerts.html" class="nav-link text-light"><i class="bi bi-bell me-2"></i><span data-i18n="alerts">Alertas</span></a></li>
+                <li class="nav-item"><a href="/static/sources.html" class="nav-link text-light"><i class="bi bi-rss me-2"></i><span data-i18n="sources">Fuentes y RSS</span></a></li>
+                <li class="nav-item"><a href="/static/notifications.html" class="nav-link text-light"><i class="bi bi-envelope me-2"></i><span data-i18n="notifications">Notificaciones</span></a></li>
+                <li class="nav-item"><a href="/static/search.html" class="nav-link text-light"><i class="bi bi-search me-2"></i><span data-i18n="search">Búsqueda</span></a></li>
+                <li class="nav-item"><a href="/static/profile.html" class="nav-link text-light"><i class="bi bi-person me-2"></i><span data-i18n="profile">Perfil</span></a></li>
+            </ul>
+            <div class="mt-auto pt-5">
+                <button class="btn btn-sm btn-outline-light w-100 mb-2" onclick="toggleLanguage()">🌐 <span id="lang-btn">EN</span></button>
+                <button class="btn btn-sm btn-danger w-100" onclick="logout()"><i class="bi bi-box-arrow-right me-1"></i><span data-i18n="logout">Cerrar Sesión</span></button>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="flex-grow-1 p-4 bg-light">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2 data-i18n="dashboard_title">Dashboard</h2>
+                    <small class="text-muted" id="user-info"></small>
+                </div>
+                <div>
+                    <input type="text" id="search-bar" class="form-control" placeholder="Buscar noticias..." data-i18n-placeholder="search_news">
+                </div>
+            </div>
+
+            <!-- KPI Cards -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-3">
+                    <div class="card shadow-sm">
+                        <div class="card-body">
+                            <small class="text-muted" data-i18n="active_sources">FUENTES ACTIVAS</small>
+                            <h2 id="kpi-sources">—</h2>
+                            <i class="bi bi-rss text-primary fs-3"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card shadow-sm">
+                        <div class="card-body">
+                            <small class="text-muted" data-i18n="captured_news">NOTICIAS CAPTURADAS</small>
+                            <h2 id="kpi-news">—</h2>
+                            <i class="bi bi-newspaper text-success fs-3"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card shadow-sm">
+                        <div class="card-body">
+                            <small class="text-muted" data-i18n="configured_alerts">ALERTAS CONFIGURADAS</small>
+                            <h2 id="kpi-alerts">—</h2>
+                            <i class="bi bi-bell text-warning fs-3"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card shadow-sm">
+                        <div class="card-body">
+                            <small class="text-muted" data-i18n="rss_channels">CANALES RSS</small>
+                            <h2 id="kpi-channels">—</h2>
+                            <i class="bi bi-broadcast text-info fs-3"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="row g-3">
+                <div class="col-md-7">
+                    <div class="card shadow-sm">
+                        <div class="card-body">
+                            <h5 data-i18n="capture_evolution">Evolución de Captura</h5>
+                            <small class="text-muted" data-i18n="news_per_day">Volumen de noticias por día</small>
+                            <canvas id="line-chart" height="100"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <div class="card shadow-sm">
+                        <div class="card-body">
+                            <h5 data-i18n="news_by_category">Noticias por Categoría</h5>
+                            <canvas id="bar-chart" height="120"></canvas>
+                            <ul class="list-unstyled mt-3 small" id="category-list"></ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="/static/js/i18n.js"></script>
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

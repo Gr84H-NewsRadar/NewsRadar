@@ -1,0 +1,96 @@
+/* NewsRadar - Estilos personalizados */
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+#sidebar {
+    box-shadow: 2px 0 8px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+}
+
+#sidebar .nav-link {
+    border-radius: 6px;
+    margin-bottom: 4px;
+    padding: 8px 12px;
+    transition: all 0.2s;
+}
+
+#sidebar .nav-link:hover {
+    background-color: rgba(255,255,255,0.1);
+}
+
+#sidebar .nav-link.active {
+    background-color: rgba(255,255,255,0.2);
+    font-weight: 600;
+}
+
+.card {
+    border: none;
+    border-radius: 8px;
+}
+
+.kpi-icon {
+    font-size: 2rem;
+    opacity: 0.3;
+}
+
+.word-cloud-container {
+    text-align: center;
+    padding: 20px;
+}
+
+.word-cloud-tag {
+    display: inline-block;
+    margin: 4px 8px;
+    font-weight: 600;
+}
+
+.notification-card {
+    border-left: 4px solid #6c757d;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    background: #fff;
+    border-radius: 4px;
+}
+
+.notification-card.unread {
+    border-left-color: #0d6efd;
+    background: #f0f8ff;
+}
+
+.notification-card.alert {
+    border-left-color: #ffc107;
+}
+
+.news-result-card {
+    border: 1px solid #dee2e6;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    border-radius: 6px;
+    background: #fff;
+}
+
+.news-result-card:hover {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.synonym-suggestion {
+    display: inline-block;
+    background: #e9ecef;
+    padding: 4px 10px;
+    margin: 2px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.synonym-suggestion:hover {
+    background: #dee2e6;
+}
+
+.synonym-suggestion.selected {
+    background: #212529;
+    color: white;
+}
