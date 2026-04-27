@@ -1,5 +1,7 @@
 # NewsRadar
 
+[![CI/CD Pipeline](https://github.com/Gr84H-NewsRadar/NewsRadar/actions/workflows/ci.yml/badge.svg)](https://github.com/Gr84H-NewsRadar/NewsRadar/actions/workflows/ci.yml)
+
 Sistema de monitorización de noticias en medios de comunicación y fuentes oficiales.
 
 ## Descripción

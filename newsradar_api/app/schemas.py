@@ -3,7 +3,8 @@ from typing import List, Optional
 from pydantic import BaseModel, EmailStr, Field, HttpUrl
 
 
-# Token schemas
+# ==================== TOKEN ====================
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -13,13 +14,30 @@ class TokenData(BaseModel):
     email: Optional[str] = None
 
 
-# Role schemas
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+# ==================== METRIC (usado por Notification y Stats) ====================
+
+class Metric(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    value: float
+
+
+# ==================== ROLES ====================
+
 class RoleBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
 
 
 class RoleCreate(RoleBase):
     pass
+
+
+class RoleUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
 
 
 class Role(RoleBase):
@@ -29,7 +47,8 @@ class Role(RoleBase):
         from_attributes = True
 
 
-# User schemas
+# ==================== USERS ====================
+
 class UserBase(BaseModel):
     email: EmailStr
     first_name: str = Field(..., min_length=1, max_length=120)
@@ -61,31 +80,33 @@ class User(UserBase):
         from_attributes = True
 
 
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
+# ==================== CATEGORIES ====================
 
-
-# Category schemas
 class CategoryBase(BaseModel):
-    code: str = Field(..., min_length=1, max_length=60)
+    # El profe NO incluye 'code' en el schema externo, solo 'name' y 'source'
     name: str = Field(..., min_length=1, max_length=120)
-    source: str = Field(default="IPTC")
+    source: str = Field(default="IPTC", pattern="^IPTC$")
 
 
 class CategoryCreate(CategoryBase):
-    pass
+    # Internamente necesitamos el code para guardar en BD, lo hacemos opcional
+    code: Optional[str] = Field(None, min_length=1, max_length=60)
+
+
+class CategoryUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=120)
+    source: Optional[str] = Field(None, pattern="^IPTC$")
 
 
 class Category(CategoryBase):
     id: int
-    created_at: datetime
 
     class Config:
         from_attributes = True
 
 
-# Information Source schemas
+# ==================== INFORMATION SOURCES ====================
+
 class InformationSourceBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
     url: HttpUrl
@@ -95,15 +116,20 @@ class InformationSourceCreate(InformationSourceBase):
     pass
 
 
+class InformationSourceUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=120)
+    url: Optional[HttpUrl] = None
+
+
 class InformationSource(InformationSourceBase):
     id: int
-    created_at: datetime
 
     class Config:
         from_attributes = True
 
 
-# RSS Channel schemas
+# ==================== RSS CHANNELS ====================
+
 class RSSChannelBase(BaseModel):
     url: HttpUrl
     category_id: int
@@ -111,6 +137,12 @@ class RSSChannelBase(BaseModel):
 
 class RSSChannelCreate(RSSChannelBase):
     pass
+
+
+class RSSChannelUpdate(BaseModel):
+    url: Optional[HttpUrl] = None
+    category_id: Optional[int] = None
+    is_active: Optional[bool] = None
 
 
 class RSSChannel(RSSChannelBase):
@@ -124,25 +156,33 @@ class RSSChannel(RSSChannelBase):
         from_attributes = True
 
 
-# Alert schemas
+# ==================== ALERTS ====================
+# IMPORTANTE: el profe usa 'descriptors' (= keywords) y 'categories' (lista de objetos)
+
+class AlertCategoryItem(BaseModel):
+    code: str = Field(..., min_length=1, max_length=60)
+    label: str = Field(..., min_length=1, max_length=120)
+
+
 class AlertBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
-    keywords: List[str] = Field(..., min_items=1)
-    category_code: Optional[str] = None
-    cron_expression: str = Field(default="0 */6 * * *")
+    descriptors: List[str] = Field(default_factory=list)          # = keywords internamente
+    categories: List[AlertCategoryItem] = Field(default_factory=list)  # = category_code internamente
+    cron_expression: str = Field(..., min_length=1, max_length=120)
+
+
+class AlertCreate(AlertBase):
+    # Campos extra que usamos internamente pero el profe no define
+    rss_channel_ids: List[int] = Field(default_factory=list)
     notify_email: bool = True
     notify_inbox: bool = True
 
 
-class AlertCreate(AlertBase):
-    rss_channel_ids: List[int] = Field(default_factory=list)
-
-
 class AlertUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=200)
-    keywords: Optional[List[str]] = None
-    category_code: Optional[str] = None
-    cron_expression: Optional[str] = None
+    descriptors: Optional[List[str]] = None
+    categories: Optional[List[AlertCategoryItem]] = None
+    cron_expression: Optional[str] = Field(None, min_length=1, max_length=120)
     is_active: Optional[bool] = None
     notify_email: Optional[bool] = None
     notify_inbox: Optional[bool] = None
@@ -152,15 +192,106 @@ class AlertUpdate(BaseModel):
 class Alert(AlertBase):
     id: int
     user_id: int
-    is_active: bool
-    created_at: datetime
-    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
 
+    # Mapeamos desde el modelo de BD (keywords -> descriptors, category_code -> categories)
+    @classmethod
+    def from_orm_alert(cls, alert_orm):
+        """Convierte un Alert de BD al schema del profe"""
+        cats = []
+        if alert_orm.category_code:
+            cats = [AlertCategoryItem(code=alert_orm.category_code, label=alert_orm.category_code)]
+        return cls(
+            id=alert_orm.id,
+            user_id=alert_orm.user_id,
+            name=alert_orm.name,
+            descriptors=alert_orm.keywords or [],
+            categories=cats,
+            cron_expression=alert_orm.cron_expression or "0 */6 * * *"
+        )
 
-# News Item schemas
+
+# ==================== NOTIFICATIONS ====================
+# IMPORTANTE: el profe usa 'timestamp' y 'metrics: List[Metric]'
+
+class NotificationBase(BaseModel):
+    timestamp: datetime
+    metrics: List[Metric] = Field(default_factory=list)
+
+
+class NotificationCreate(NotificationBase):
+    pass
+
+
+class NotificationUpdate(BaseModel):
+    timestamp: Optional[datetime] = None
+    metrics: Optional[List[Metric]] = None
+
+
+class Notification(NotificationBase):
+    id: int
+    alert_id: int
+
+    class Config:
+        from_attributes = True
+
+    @classmethod
+    def from_orm_notification(cls, notif_orm):
+        """Convierte una Notification de BD al schema del profe"""
+        # Intentamos leer metrics del campo statistics si existe
+        metrics = []
+        if notif_orm.statistics and isinstance(notif_orm.statistics, dict):
+            for k, v in notif_orm.statistics.items():
+                try:
+                    metrics.append(Metric(name=k, value=float(v)))
+                except Exception:
+                    pass
+        return cls(
+            id=notif_orm.id,
+            alert_id=notif_orm.alert_id,
+            timestamp=notif_orm.created_at,
+            metrics=metrics
+        )
+
+
+# ==================== STATS ====================
+# IMPORTANTE: el profe usa 'metrics: List[Metric]'
+
+class StatsBase(BaseModel):
+    metrics: List[Metric] = Field(default_factory=list)
+
+
+class StatsCreate(StatsBase):
+    pass
+
+
+class StatsUpdate(BaseModel):
+    metrics: Optional[List[Metric]] = None
+
+
+class Stats(StatsBase):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+    @classmethod
+    def from_orm_stats(cls, stats_orm):
+        """Convierte ProcessingStats de BD al schema del profe"""
+        metrics = [
+            Metric(name="total_feeds_processed", value=float(stats_orm.total_feeds_processed or 0)),
+            Metric(name="total_feeds_failed", value=float(stats_orm.total_feeds_failed or 0)),
+            Metric(name="total_news_items", value=float(stats_orm.total_news_items or 0)),
+            Metric(name="total_alerts_triggered", value=float(stats_orm.total_alerts_triggered or 0)),
+            Metric(name="processing_time_seconds", value=float(stats_orm.processing_time_seconds or 0)),
+        ]
+        return cls(id=stats_orm.id, metrics=metrics)
+
+
+# ==================== SCHEMAS INTERNOS (no expuestos al profe) ====================
+
 class NewsItemBase(BaseModel):
     title: str
     link: str
@@ -180,46 +311,19 @@ class NewsItem(NewsItemBase):
         from_attributes = True
 
 
-# Notification schemas
-class NotificationBase(BaseModel):
-    title: str
-    message: str
-    statistics: Optional[dict] = None
-
-
-class NotificationCreate(NotificationBase):
-    alert_id: int
-
-
-class Notification(NotificationBase):
+class ProcessingStats(BaseModel):
     id: int
-    alert_id: int
-    is_read: bool
-    sent_email: bool
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
-# Statistics schemas
-class ProcessingStatsBase(BaseModel):
     total_feeds_processed: int = 0
     total_feeds_failed: int = 0
     total_news_items: int = 0
     total_alerts_triggered: int = 0
     processing_time_seconds: int = 0
-
-
-class ProcessingStats(ProcessingStatsBase):
-    id: int
     created_at: datetime
 
     class Config:
         from_attributes = True
 
 
-# Dashboard statistics
 class DashboardStats(BaseModel):
     total_sources: int
     total_news: int
@@ -228,7 +332,6 @@ class DashboardStats(BaseModel):
     alerts_by_category: dict
 
 
-# Synonym recommendation
 class SynonymRecommendation(BaseModel):
     keyword: str
     synonyms: List[str]
