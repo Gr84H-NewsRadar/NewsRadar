@@ -642,6 +642,7 @@ def delete_stats(stats_id: int, db: Session = Depends(get_db),
 
 # ==================== NEWS (RF17 - busqueda y filtrado) ====================
 
+# RF17 - busqueda y filtrado: parametros q (full-text), date_from/date_to (rango fechas)
 @app.get(f"{API_PREFIX}/news", response_model=List[schemas.NewsItem], tags=["news"])
 def list_news(
     skip: int = 0,
