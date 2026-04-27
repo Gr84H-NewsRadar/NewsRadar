@@ -1,0 +1,70 @@
+name: CD Pipeline - Empaquetado y Distribución
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+    - uses: actions/checkout@v4
+    - name: Extraer versión del tag
+      id: tag
+      run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+    - name: Configurar Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    - name: Construir imagen Docker
+      run: |
+        docker build -t newsradar:${{ steps.tag.outputs.version }} ./newsradar_api
+        docker tag newsradar:${{ steps.tag.outputs.version }} newsradar:latest
+    - name: Guardar imagen Docker
+      run: |
+        mkdir -p release-artifacts
+        docker save newsradar:${{ steps.tag.outputs.version }} | gzip > release-artifacts/newsradar-${{ steps.tag.outputs.version }}.tar.gz
+    - name: Generar notas de release
+      run: |
+        echo "Release: ${{ steps.tag.outputs.version }}" > release-artifacts/RELEASE_NOTES.txt
+        echo "" >> release-artifacts/RELEASE_NOTES.txt
+        echo "Construido en: $(date)" >> release-artifacts/RELEASE_NOTES.txt
+        echo "Commit: ${{ github.sha }}" >> release-artifacts/RELEASE_NOTES.txt
+        echo "Repositorio: ${{ github.repository }}" >> release-artifacts/RELEASE_NOTES.txt
+    - name: Subir artefactos de release
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-${{ steps.tag.outputs.version }}
+        path: release-artifacts/
+    - name: Crear GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: release-artifacts/*
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  verify-build:
+    runs-on: ubuntu-latest
+    needs: build-release
+    steps:
+    - uses: actions/checkout@v4
+    - name: Extraer versión del tag
+      id: tag
+      run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+    - name: Descargar artefacto de release
+      uses: actions/download-artifact@v4
+      with:
+        name: release-${{ steps.tag.outputs.version }}
+        path: release-artifacts/
+    - name: Verificar integridad de imagen
+      run: |
+        if [ -f "release-artifacts/newsradar-${{ steps.tag.outputs.version }}.tar.gz" ]; then
+          echo "Artefacto de release verificado: newsradar-${{ steps.tag.outputs.version }}.tar.gz existe"
+          ls -lh release-artifacts/
+        else
+          echo "ERROR: Artefacto de release no encontrado"
+          exit 1
+        fi

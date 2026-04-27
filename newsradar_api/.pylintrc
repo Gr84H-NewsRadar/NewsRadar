@@ -1,0 +1,12 @@
+[MASTER]
+disable=
+    C0114,  # missing-module-docstring
+    C0115,  # missing-class-docstring
+    C0116,  # missing-function-docstring
+    R0903,  # too-few-public-methods (class convention)
+    R0913,  # too-many-arguments (function convention)
+    C0411,  # wrong-import-order (handled by isort)
+    W0212,  # protected-access
+
+[FORMAT]
+max-line-length=100
