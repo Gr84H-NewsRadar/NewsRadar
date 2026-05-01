@@ -1,16 +1,15 @@
 #!/bin/bash
 set -e
 
-echo "Running tests..."
-
-cd newsradar_api
-
-# Activate virtual environment if it exists
-if [ -d ".venv" ]; then
-    source .venv/bin/activate
+if docker compose version &>/dev/null 2>&1; then
+    DC="docker compose"
+elif command -v docker-compose &>/dev/null 2>&1; then
+    DC="docker-compose"
+else
+    echo "ERROR: Docker Compose no encontrado."
+    exit 1
 fi
 
-# Run tests
-pytest tests/ -v --cov=app --cov-report=html --cov-report=term
-
+echo "Running tests inside container..."
+$DC exec api pytest tests/ -v --cov=app --cov-report=term-missing
 echo "Tests complete!"
