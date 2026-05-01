@@ -23,6 +23,14 @@ Sistema de monitorización de noticias en medios de comunicación y fuentes ofic
 
 NewsRadar permite escuchar canales RSS de medios de comunicación y fuentes oficiales, organizar la información en categorías IPTC, y monitorizar palabras clave mediante alertas configurables. Cuando se detecta una noticia que coincide con una alerta, el sistema notifica al usuario por correo y por buzón interno.
 
+## Requisitos previos
+
+- Docker Engine ≥ 24.0 con el usuario en el grupo `docker`:
+```bash
+  sudo usermod -aG docker $USER && newgrp docker
+```
+- Puertos libres: 8000, 5432, 1025, 8025
+
 ## Inicio rápido
 
 ```bash
