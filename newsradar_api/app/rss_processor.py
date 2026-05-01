@@ -182,7 +182,8 @@ def match_news_against_alerts(
             if not valid_category:
                 logger.warning(
                     "Alert %s has invalid category_code '%s', ignoring category filter",
-                    alert.id, alert.category_code
+                    alert.id,
+                    alert.category_code,
                 )
             else:
                 category = (

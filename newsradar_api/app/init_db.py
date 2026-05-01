@@ -19,7 +19,7 @@ def init_roles(db: Session):
         if not existing:
             role = models.Role(**role_data)
             db.add(role)
-            logger.info("Created role: %s", role_data['name'])
+            logger.info("Created role: %s", role_data["name"])
 
     db.commit()
 
@@ -59,7 +59,7 @@ def init_categories(db: Session):
         if not existing:
             category = models.Category(**cat_data)
             db.add(category)
-            logger.info("Created category: %s", cat_data['name'])
+            logger.info("Created category: %s", cat_data["name"])
 
     db.commit()
 

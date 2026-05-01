@@ -1250,13 +1250,11 @@ SPANISH_STOPWORDS = {
     "mi",
     "antes",
     "algunos",
-
     "unos",
     "yo",
     "otro",
     "otras",
     "otra",
-
     "tanto",
     "esa",
     "estos",
