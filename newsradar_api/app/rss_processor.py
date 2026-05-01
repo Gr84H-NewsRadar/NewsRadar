@@ -16,8 +16,8 @@ def fetch_rss_feed(url: str, timeout: int = 30) -> Dict:
     try:
         feed = feedparser.parse(url)
         return feed
-    except Exception as e:
-        logger.error(f"Error fetching RSS feed {url}: {str(e)}")
+    except Exception as e:  # pylint: disable=broad-except
+        logger.error("Error fetching RSS feed %s: %s", url, str(e))
         return None
 
 
@@ -123,8 +123,8 @@ async def process_rss_channels(db: Session) -> Dict:
             channel.last_fetched = datetime.utcnow()
             stats["total_feeds_processed"] += 1
 
-        except Exception as e:
-            logger.error(f"Error processing channel {channel.id}: {str(e)}")
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error("Error processing channel %s: %s", channel.id, str(e))
             stats["total_feeds_failed"] += 1
 
     db.commit()
@@ -147,7 +147,7 @@ async def process_rss_channels(db: Session) -> Dict:
     db.commit()
 
     # Send one summary notification per alert that had matches
-    for alert_id, data in alert_matches.items():
+    for _, data in alert_matches.items():
         await send_cycle_notification(db, data["alert"], data["matches"], stats)
 
     return stats
@@ -181,7 +181,8 @@ def match_news_against_alerts(
             )
             if not valid_category:
                 logger.warning(
-                    f"Alert {alert.id} has invalid category_code '{alert.category_code}', ignoring category filter"
+                    "Alert %s has invalid category_code '%s', ignoring category filter",
+                    alert.id, alert.category_code
                 )
             else:
                 category = (
@@ -265,7 +266,7 @@ async def send_cycle_notification(
             )
             if alert.notify_inbox and email_sent:
                 notification.sent_email = True
-        except Exception as e:
-            logger.error(f"Failed to send summary email: {str(e)}")
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error("Failed to send summary email: %s", str(e))
 
     db.commit()

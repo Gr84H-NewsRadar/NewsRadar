@@ -19,7 +19,7 @@ def init_roles(db: Session):
         if not existing:
             role = models.Role(**role_data)
             db.add(role)
-            logger.info(f"Created role: {role_data['name']}")
+            logger.info("Created role: %s", role_data['name'])
 
     db.commit()
 
@@ -59,7 +59,7 @@ def init_categories(db: Session):
         if not existing:
             category = models.Category(**cat_data)
             db.add(category)
-            logger.info(f"Created category: {cat_data['name']}")
+            logger.info("Created category: %s", cat_data['name'])
 
     db.commit()
 
@@ -87,9 +87,9 @@ def init_admin_user(db: Session):
 
         db.add(admin_user)
         db.commit()
-        logger.info(f"Created admin user: {admin_email}")
+        logger.info("Created admin user: %s", admin_email)
     else:
-        logger.info(f"Admin user already exists: {admin_email}")
+        logger.info("Admin user already exists: %s", admin_email)
 
 
 def init_sample_sources(db: Session):

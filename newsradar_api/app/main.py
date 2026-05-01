@@ -58,7 +58,7 @@ async def startup_event():
         initialize_database(db)
         logger.info("Database initialized successfully")
     except Exception as e:
-        logger.error(f"Error initializing database: {str(e)}")
+        logger.error("Error initializing database: %s", str(e))
     finally:
         db.close()
 
@@ -1250,13 +1250,13 @@ SPANISH_STOPWORDS = {
     "mi",
     "antes",
     "algunos",
-    "que",
+
     "unos",
     "yo",
     "otro",
     "otras",
     "otra",
-    "el",
+
     "tanto",
     "esa",
     "estos",
@@ -1335,8 +1335,8 @@ async def trigger_rss_processing(
         stats = await process_rss_channels(db)
         return {"status": "completed", "statistics": stats}
     except Exception as e:
-        logger.error(f"Error processing RSS feeds: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+        logger.error("Error processing RSS feeds: %s", str(e))
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}") from e
 
 
 # ==================== FRONTEND STATIC FILES ====================

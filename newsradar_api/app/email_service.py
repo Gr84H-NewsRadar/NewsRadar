@@ -37,10 +37,10 @@ async def send_email(to_email: str, subject: str, body: str, html_body: str = No
             smtp_kwargs["password"] = settings.SMTP_PASSWORD
 
         await aiosmtplib.send(message, **smtp_kwargs)
-        logger.info(f"Email sent successfully to {to_email}")
+        logger.info("Email sent successfully to %s", to_email)
         return True
-    except Exception as e:
-        logger.error(f"Failed to send email to {to_email}: {str(e)}")
+    except Exception as e:  # pylint: disable=broad-except
+        logger.error("Failed to send email to %s: %s", to_email, str(e))
         return False
 
 
