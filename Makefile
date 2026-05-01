@@ -1,46 +1,47 @@
-.PHONY: help build run test deploy clean logs
+DC := $(shell docker compose version > /dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
+
+.PHONY: help build run test deploy clean logs shell stop restart ps
 
 help:
 	@echo "NewsRadar - Available commands:"
-	@echo "  make build   - Build Docker images"
-	@echo "  make run     - Run application with Docker Compose"
-	@echo "  make test    - Run tests"
-	@echo "  make deploy  - Deploy application"
-	@echo "  make clean   - Clean up containers and volumes"
-	@echo "  make logs    - Show application logs"
-	@echo "  make shell   - Open shell in API container"
+	@echo "  make build    - Build Docker images"
+	@echo "  make run      - Run application with Docker Compose"
+	@echo "  make test     - Run tests inside container"
+	@echo "  make deploy   - Deploy application (build + run + healthcheck)"
+	@echo "  make clean    - Clean up containers and volumes"
+	@echo "  make logs     - Show application logs"
+	@echo "  make shell    - Open shell in API container"
+	@echo "  make stop     - Stop containers"
+	@echo "  make restart  - Restart containers"
+	@echo "  make ps       - Show container status"
 
 build:
-	docker-compose build
+	bash scripts/build.sh
 
 run:
-	docker-compose up -d
-	@echo "Application started!"
-	@echo "API: http://localhost:8000"
-	@echo "Docs: http://localhost:8000/docs"
-	@echo "MailHog: http://localhost:8025"
+	bash scripts/run.sh
 
 test:
-	cd newsradar_api && pytest tests/ -v --cov=app
+	bash scripts/test.sh
 
 deploy:
 	bash scripts/deploy.sh
 
 clean:
-	docker-compose down -v
+	$(DC) down -v
 	rm -f newsradar_api/*.db
 
 logs:
-	docker-compose logs -f api
+	$(DC) logs -f api
 
 shell:
-	docker-compose exec api /bin/bash
+	$(DC) exec api /bin/bash
 
 stop:
-	docker-compose down
+	$(DC) down
 
 restart:
-	docker-compose restart
+	$(DC) restart
 
 ps:
-	docker-compose ps
+	$(DC) ps
