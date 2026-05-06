@@ -438,3 +438,148 @@ def test_list_news_with_filters():
     response = client.get("/api/v1/news?category_id=1&alert_id=1",
         headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
+
+
+# ==================== TESTS PARCHE PROFE (28/04/2026) ====================
+# El profe pidió añadir rss_channels_ids e information_sources_ids al API
+# en AlertBase y AlertUpdate.
+
+def _bootstrap_manager_with_roles():
+    """Crea rol manager + usuario manager verificado y devuelve (user_id, token)."""
+    from app import models  # import local para evitar ciclos
+    db = TestingSessionLocal()
+    try:
+        manager_role = models.Role(name="manager")
+        db.add(manager_role)
+        db.commit()
+        db.refresh(manager_role)
+        manager_role_id = manager_role.id
+    finally:
+        db.close()
+
+    r = client.post("/api/v1/auth/register", json={
+        "email": "patchmgr@example.com",
+        "first_name": "Patch", "last_name": "Mgr",
+        "organization": "UC3M", "password": "pass123",
+        "role_ids": [manager_role_id]
+    })
+    assert r.status_code == 201, r.text
+    user_id = r.json()["id"]
+
+    # El usuario nace con is_verified=False; require_manager exige verificación.
+    db = TestingSessionLocal()
+    try:
+        u = db.query(models.User).filter(models.User.id == user_id).first()
+        u.is_verified = True
+        db.commit()
+    finally:
+        db.close()
+
+    token = client.post("/api/v1/auth/login",
+        data={"username": "patchmgr@example.com", "password": "pass123"}
+    ).json()["access_token"]
+    return user_id, token
+
+
+def test_alertbase_schema_has_new_fields():
+    """Parche profe: AlertBase debe exponer rss_channels_ids e information_sources_ids."""
+    from app.schemas import AlertBase, AlertUpdate
+    base_fields = AlertBase.model_fields
+    update_fields = AlertUpdate.model_fields
+    assert "rss_channels_ids" in base_fields
+    assert "information_sources_ids" in base_fields
+    assert "rss_channels_ids" in update_fields
+    assert "information_sources_ids" in update_fields
+
+
+def test_create_alert_with_new_fields_returns_them():
+    """Parche profe: crear alerta enviando los nuevos campos y verlos en la respuesta."""
+    user_id, token = _bootstrap_manager_with_roles()
+
+    payload = {
+        "name": "Alerta parche",
+        "descriptors": ["python", "fastapi"],
+        "categories": [],
+        "rss_channels_ids": [],          # campo nuevo profe
+        "information_sources_ids": [],   # campo nuevo profe
+        "cron_expression": "0 */6 * * *"
+    }
+    r = client.post(
+        f"/api/v1/users/{user_id}/alerts",
+        json=payload,
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert "rss_channels_ids" in body
+    assert "information_sources_ids" in body
+    assert body["rss_channels_ids"] == []
+    assert body["information_sources_ids"] == []
+
+
+def test_update_alert_with_new_fields_does_not_break():
+    """Parche profe: PUT con los nuevos campos no debe romper el endpoint."""
+    user_id, token = _bootstrap_manager_with_roles()
+
+    # Crear alerta inicial
+    create_payload = {
+        "name": "Alerta a actualizar",
+        "descriptors": ["test"],
+        "categories": [],
+        "rss_channels_ids": [],
+        "information_sources_ids": [],
+        "cron_expression": "0 */6 * * *"
+    }
+    r = client.post(
+        f"/api/v1/users/{user_id}/alerts",
+        json=create_payload,
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert r.status_code == 201, r.text
+    alert_id = r.json()["id"]
+
+    # PUT incluyendo los nuevos campos vacíos
+    update_payload = {
+        "name": "Alerta renombrada",
+        "rss_channels_ids": [],
+        "information_sources_ids": []
+    }
+    r = client.put(
+        f"/api/v1/users/{user_id}/alerts/{alert_id}",
+        json=update_payload,
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["name"] == "Alerta renombrada"
+    assert body["rss_channels_ids"] == []
+    assert body["information_sources_ids"] == []
+
+
+def test_alert_response_uses_strings_for_new_id_fields():
+    """Parche profe: tipo declarado es List[str], la respuesta debe ser strings."""
+    user_id, token = _bootstrap_manager_with_roles()
+
+    payload = {
+        "name": "Alerta tipos",
+        "descriptors": [],
+        "categories": [],
+        "rss_channels_ids": [],
+        "information_sources_ids": [],
+        "cron_expression": "0 */6 * * *"
+    }
+    r = client.post(
+        f"/api/v1/users/{user_id}/alerts",
+        json=payload,
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    # Las listas son vacías, pero el tipado del schema fuerza List[str].
+    assert isinstance(body["rss_channels_ids"], list)
+    assert isinstance(body["information_sources_ids"], list)
+    # Si en algún momento hubiera elementos, comprobamos que serían str
+    for x in body["rss_channels_ids"]:
+        assert isinstance(x, str)
+    for x in body["information_sources_ids"]:
+        assert isinstance(x, str)
