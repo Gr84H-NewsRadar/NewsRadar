@@ -1,6 +1,8 @@
+export DOCKER_CONFIG ?= $(CURDIR)/.docker-local
+
 DC := $(shell docker compose version > /dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 
-.PHONY: help build run test deploy clean logs shell stop restart ps
+.PHONY: help docker-config build run test deploy clean logs shell stop restart ps
 
 help:
 	@echo "NewsRadar - Available commands:"
@@ -15,7 +17,10 @@ help:
 	@echo "  make restart  - Restart containers"
 	@echo "  make ps       - Show container status"
 
-build:
+docker-config:
+	@bash -c 'mkdir -p "$$DOCKER_CONFIG" && [ -f "$$DOCKER_CONFIG/config.json" ] || printf "{}\n" > "$$DOCKER_CONFIG/config.json"'
+
+build: docker-config
 	bash scripts/build.sh
 
 run:
@@ -24,7 +29,7 @@ run:
 test:
 	bash scripts/test.sh
 
-deploy:
+deploy: docker-config
 	bash scripts/deploy.sh
 
 clean:

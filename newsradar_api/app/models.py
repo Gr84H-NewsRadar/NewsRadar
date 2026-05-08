@@ -51,6 +51,10 @@ class User(Base):
     roles = relationship("Role", secondary=user_roles, back_populates="users")
     alerts = relationship("Alert", back_populates="user", cascade="all, delete-orphan")
 
+    @property
+    def role_ids(self):
+        return [role.id for role in self.roles]
+
 
 class Role(Base):
     __tablename__ = "roles"
@@ -178,6 +182,7 @@ class ProcessingStats(Base):
     __tablename__ = "processing_stats"
 
     id = Column(Integer, primary_key=True, index=True)
+    metrics = Column(JSON, nullable=True)
     total_feeds_processed = Column(Integer, default=0)
     total_feeds_failed = Column(Integer, default=0)
     total_news_items = Column(Integer, default=0)

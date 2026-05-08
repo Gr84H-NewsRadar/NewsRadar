@@ -24,7 +24,7 @@ class LoginRequest(BaseModel):
 
 
 class Metric(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
+    name: str = Field(..., min_length=1, max_length=80)
     value: float
 
 
@@ -32,7 +32,7 @@ class Metric(BaseModel):
 
 
 class RoleBase(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
+    name: str = Field(..., min_length=1, max_length=80)
 
 
 class RoleCreate(RoleBase):
@@ -70,15 +70,13 @@ class UserUpdate(BaseModel):
     first_name: Optional[str] = Field(None, min_length=1, max_length=120)
     last_name: Optional[str] = Field(None, min_length=1, max_length=120)
     organization: Optional[str] = Field(None, min_length=1, max_length=180)
+    role_ids: Optional[List[int]] = None
     password: Optional[str] = Field(None, min_length=6, max_length=128)
 
 
 class User(UserBase):
     id: int
-    is_active: bool
-    is_verified: bool
-    roles: List[Role] = []
-    created_at: datetime
+    role_ids: List[int] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
@@ -94,8 +92,7 @@ class CategoryBase(BaseModel):
 
 
 class CategoryCreate(CategoryBase):
-    # Internamente necesitamos el code para guardar en BD, lo hacemos opcional
-    code: Optional[str] = Field(None, min_length=1, max_length=60)
+    source: str = Field(..., pattern="^IPTC$")
 
 
 class CategoryUpdate(BaseModel):
@@ -155,9 +152,6 @@ class RSSChannelUpdate(BaseModel):
 class RSSChannel(RSSChannelBase):
     id: int
     information_source_id: int
-    is_active: bool
-    last_fetched: Optional[datetime] = None
-    created_at: datetime
 
     class Config:
         from_attributes = True
@@ -296,6 +290,11 @@ class Stats(StatsBase):
     @classmethod
     def from_orm_stats(cls, stats_orm):
         """Convierte ProcessingStats de BD al schema del profe"""
+        if getattr(stats_orm, "metrics", None):
+            return cls(
+                id=stats_orm.id,
+                metrics=[Metric(name=str(item["name"]), value=float(item["value"])) for item in stats_orm.metrics],
+            )
         metrics = [
             Metric(
                 name="total_feeds_processed",

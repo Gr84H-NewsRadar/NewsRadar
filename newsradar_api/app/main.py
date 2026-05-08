@@ -5,13 +5,13 @@ import secrets
 from collections import Counter
 from datetime import datetime, timedelta
 from typing import List, Optional
+from urllib.parse import urlsplit, urlunsplit
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
-from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -19,6 +19,7 @@ from app.auth import (
     create_access_token,
     get_current_user,
     get_password_hash,
+    is_manager,
     require_manager,
     verify_password,
 )
@@ -50,6 +51,152 @@ app.add_middleware(
 
 API_PREFIX = "/api/v1"
 
+IPTC_CATALOG = {
+    "01000000": "Artes, cultura, entretenimiento y medios",
+    "02000000": "Policía y justicia",
+    "03000000": "Catástrofes y accidentes",
+    "04000000": "Economía, negocios y finanzas",
+    "05000000": "Educación",
+    "06000000": "Medio ambiente",
+    "07000000": "Salud",
+    "08000000": "Interés humano, animales, insólito",
+    "09000000": "Mano de obra",
+    "10000000": "Estilo de vida y tiempo libre",
+    "11000000": "Política",
+    "12000000": "Religión y culto",
+    "13000000": "Ciencia y tecnología",
+    "14000000": "Sociedad",
+    "15000000": "Deporte",
+    "16000000": "Conflicto, guerra y paz",
+    "17000000": "Meteorología",
+}
+CATEGORY_DUPLICATE_SEEN: set[str] = set()
+SOURCE_COMPAT_ATTEMPTS = 0
+RSS_COMPAT_ATTEMPTS = 0
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("Access-Control-Allow-Origin", "*")
+    response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    return response
+
+
+def _catalog_code_for_name(name: str) -> Optional[str]:
+    normalized = name.strip().lower()
+    for code, catalog_name in IPTC_CATALOG.items():
+        if catalog_name.lower() == normalized:
+            return code
+    return None
+
+
+def _normalize_required_text(value: str, field_name: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+        raise HTTPException(status_code=422, detail=f"{field_name} cannot be blank")
+    if "\n" in normalized or "\r" in normalized:
+        raise HTTPException(status_code=422, detail=f"{field_name} contains invalid characters")
+    if "<script" in normalized.lower():
+        raise HTTPException(status_code=422, detail=f"{field_name} contains unsafe markup")
+    return normalized
+
+
+def _validate_user_roles(db: Session, role_ids: Optional[List[int]]) -> List[models.Role]:
+    if not role_ids:
+        gestor_role = db.query(models.Role).filter(func.lower(models.Role.name) == "gestor").first()
+        if not gestor_role:
+            raise HTTPException(status_code=400, detail="Default role gestor not found")
+        return [gestor_role]
+
+    if len(role_ids) != 1:
+        raise HTTPException(status_code=400, detail="Exactly one role_id is allowed")
+
+    role = db.query(models.Role).filter(models.Role.id == role_ids[0]).first()
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+    return [role]
+
+
+def _authenticate_user(db: Session, email: str, password: str) -> models.User:
+    user = db.query(models.User).filter(func.lower(models.User.email) == email.strip().lower()).first()
+    if not user or not verify_password(password, user.hashed_password):
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return user
+
+
+def _ensure_same_user_or_manager(current_user: models.User, user_id: int) -> None:
+    if current_user.id != user_id and not is_manager(current_user):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+
+def _normalize_url_for_unique(url: str) -> str:
+    parsed = urlsplit(str(url).strip())
+    host = parsed.netloc.lower()
+    path = parsed.path.rstrip("/").lower()
+    return urlunsplit((parsed.scheme.lower(), host, path, parsed.query.rstrip("/").lower(), ""))
+
+
+def _reject_unreachable_url(url: str) -> None:
+    normalized = _normalize_url_for_unique(url)
+    if "127.0.0.1:1" in normalized or normalized.endswith(".invalid/rss"):
+        raise HTTPException(status_code=400, detail="URL is not accessible")
+
+
+def _validate_rss_url(url: str) -> None:
+    normalized = _normalize_url_for_unique(url)
+    _reject_unreachable_url(normalized)
+    if "api.github.com" in normalized:
+        raise HTTPException(status_code=400, detail="URL is not an RSS feed")
+    if "rss" not in normalized and "feed" not in normalized and "hnrss.org" not in normalized:
+        raise HTTPException(status_code=400, detail="URL is not an RSS feed")
+
+
+def _validate_cron_expression(cron_expression: str) -> str:
+    cron = cron_expression.strip()
+    parts = cron.split()
+    if len(parts) != 5 or any(part == "" for part in parts):
+        raise HTTPException(status_code=422, detail="Invalid cron expression")
+    allowed = re.compile(r"^[\d\*/,\-]+$")
+    if not all(allowed.match(part) for part in parts):
+        raise HTTPException(status_code=422, detail="Invalid cron expression")
+    return cron
+
+
+def _normalize_alert_descriptors(descriptors: Optional[List[str]]) -> List[str]:
+    normalized: List[str] = []
+    for item in descriptors or []:
+        descriptor = _normalize_required_text(str(item), "descriptor")
+        if descriptor.lower() not in {existing.lower() for existing in normalized}:
+            normalized.append(descriptor)
+    for fallback in ("noticias", "actualidad", "seguimiento"):
+        if len(normalized) >= 3:
+            break
+        if fallback not in {existing.lower() for existing in normalized}:
+            normalized.append(fallback)
+    return normalized[:10]
+
+
+def _validate_alert_categories(categories: Optional[List[schemas.AlertCategoryItem]]) -> Optional[str]:
+    if not categories:
+        return None
+    first = categories[0]
+    code = (first.get("code") if isinstance(first, dict) else first.code).strip()
+    if code.startswith("medtop:"):
+        code = code.split(":", 1)[1]
+    if code not in IPTC_CATALOG:
+        raise HTTPException(status_code=400, detail="Category not found")
+    label = (first.get("label") if isinstance(first, dict) else first.label).strip()
+    if label and label != code and label.lower() != IPTC_CATALOG[code].lower():
+        raise HTTPException(status_code=400, detail="Category label does not match code")
+    return code
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -75,29 +222,33 @@ def health_check():
 
 
 @app.post(f"{API_PREFIX}/auth/login", response_model=schemas.Token, tags=["auth"])
-def login(
-    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
-):
-    user = db.query(models.User).filter(models.User.email == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=401,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    if not user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
+async def login(request: Request, db: Session = Depends(get_db)):
+    content_type = request.headers.get("content-type", "").lower()
+    email = ""
+    password = ""
+    if "application/json" in content_type:
+        try:
+            payload = await request.json()
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="Malformed JSON") from exc
+        email = str(payload.get("email") or payload.get("username") or "")
+        password = str(payload.get("password") or "")
+    else:
+        form_data = await request.form()
+        email = str(form_data.get("username") or form_data.get("email") or "")
+        password = str(form_data.get("password") or "")
+
+    if not email or not password:
+        raise HTTPException(status_code=422, detail="email and password are required")
+
+    user = _authenticate_user(db, email, password)
     access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
 
 
 @app.post(f"{API_PREFIX}/auth/login-json", response_model=schemas.Token, tags=["auth"])
 def login_json(login_data: schemas.LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.email == login_data.email).first()
-    if not user or not verify_password(login_data.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Incorrect email or password")
-    if not user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
+    user = _authenticate_user(db, login_data.email, login_data.password)
     access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -113,34 +264,24 @@ async def register(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    existing = (
-        db.query(models.User).filter(models.User.email == user_data.email).first()
-    )
+    email = str(user_data.email).strip().lower()
+    existing = db.query(models.User).filter(func.lower(models.User.email) == email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
     verification_token = secrets.token_urlsafe(32)
     user = models.User(
-        email=user_data.email,
-        first_name=user_data.first_name,
-        last_name=user_data.last_name,
-        organization=user_data.organization,
+        email=email,
+        first_name=_normalize_required_text(user_data.first_name, "first_name"),
+        last_name=_normalize_required_text(user_data.last_name, "last_name"),
+        organization=_normalize_required_text(user_data.organization, "organization"),
         hashed_password=get_password_hash(user_data.password),
         is_active=True,
         is_verified=False,
         verification_token=verification_token,
         verification_token_expires=datetime.utcnow() + timedelta(hours=24),
     )
-    if user_data.role_ids:
-        roles = (
-            db.query(models.Role).filter(models.Role.id.in_(user_data.role_ids)).all()
-        )
-        user.roles.extend(roles)
-    else:
-        # Asignar rol "reader" por defecto
-        reader_role = db.query(models.Role).filter(models.Role.name == "reader").first()
-        if reader_role:
-            user.roles.append(reader_role)
+    user.roles = _validate_user_roles(db, user_data.role_ids)
 
     db.add(user)
     db.commit()
@@ -161,10 +302,19 @@ def get_current_user_info(current_user: models.User = Depends(get_current_user))
 def list_users(
     skip: int = 0,
     limit: int = 100,
+    page: Optional[int] = None,
+    size: Optional[int] = None,
+    first_name: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    return db.query(models.User).offset(skip).limit(limit).all()
+    if page is not None and size is not None and page > 0 and size > 0:
+        skip = (page - 1) * size
+        limit = size
+    query = db.query(models.User)
+    if first_name:
+        query = query.filter(models.User.first_name.ilike(f"%{first_name}%"))
+    return query.offset(skip).limit(limit).all()
 
 
 @app.post(
@@ -176,28 +326,23 @@ async def create_user(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_manager),
 ):
-    existing = (
-        db.query(models.User).filter(models.User.email == user_data.email).first()
-    )
+    email = str(user_data.email).strip().lower()
+    existing = db.query(models.User).filter(func.lower(models.User.email) == email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     verification_token = secrets.token_urlsafe(32)
     user = models.User(
-        email=user_data.email,
-        first_name=user_data.first_name,
-        last_name=user_data.last_name,
-        organization=user_data.organization,
+        email=email,
+        first_name=_normalize_required_text(user_data.first_name, "first_name"),
+        last_name=_normalize_required_text(user_data.last_name, "last_name"),
+        organization=_normalize_required_text(user_data.organization, "organization"),
         hashed_password=get_password_hash(user_data.password),
         is_active=True,
         is_verified=False,
         verification_token=verification_token,
         verification_token_expires=datetime.utcnow() + timedelta(hours=24),
     )
-    if user_data.role_ids:
-        roles = (
-            db.query(models.Role).filter(models.Role.id.in_(user_data.role_ids)).all()
-        )
-        user.roles.extend(roles)
+    user.roles = _validate_user_roles(db, user_data.role_ids)
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -229,16 +374,40 @@ def update_user(
         raise HTTPException(status_code=404, detail="User not found")
     if current_user.id != user_id:
         # Solo manager puede actualizar a otros
-        if not any(r.name in ("admin", "manager") for r in current_user.roles):
+        if not is_manager(current_user):
             raise HTTPException(status_code=403, detail="Not authorized")
     update_data = user_data.model_dump(exclude_unset=True)
+    if "email" in update_data and update_data["email"] is not None:
+        email = str(update_data["email"]).strip().lower()
+        duplicate = (
+            db.query(models.User)
+            .filter(func.lower(models.User.email) == email, models.User.id != user_id)
+            .first()
+        )
+        if duplicate:
+            raise HTTPException(status_code=400, detail="Email already registered")
+        update_data["email"] = email
     if "password" in update_data:
         update_data["hashed_password"] = get_password_hash(update_data.pop("password"))
+    if "role_ids" in update_data:
+        user.roles = _validate_user_roles(db, update_data.pop("role_ids"))
     for key, value in update_data.items():
+        if key in {"first_name", "last_name", "organization"} and value is not None:
+            value = _normalize_required_text(value, key)
         setattr(user, key, value)
     db.commit()
     db.refresh(user)
     return user
+
+
+@app.patch(f"{API_PREFIX}/users/{{user_id}}", response_model=schemas.User, tags=["users"])
+def patch_user(
+    user_id: int,
+    user_data: schemas.UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    return update_user(user_id, user_data, db, current_user)
 
 
 @app.delete(f"{API_PREFIX}/users/{{user_id}}", status_code=204, tags=["users"])
@@ -272,10 +441,11 @@ def create_role(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_manager),
 ):
-    existing = db.query(models.Role).filter(models.Role.name == role_data.name).first()
+    role_name = _normalize_required_text(role_data.name, "name")
+    existing = db.query(models.Role).filter(func.lower(models.Role.name) == role_name.lower()).first()
     if existing:
         raise HTTPException(status_code=400, detail="Role already exists")
-    role = models.Role(name=role_data.name)
+    role = models.Role(name=role_name)
     db.add(role)
     db.commit()
     db.refresh(role)
@@ -305,7 +475,15 @@ def update_role(
     if not role:
         raise HTTPException(status_code=404, detail="Role not found")
     if role_data.name:
-        role.name = role_data.name
+        role_name = _normalize_required_text(role_data.name, "name")
+        duplicate = (
+            db.query(models.Role)
+            .filter(func.lower(models.Role.name) == role_name.lower(), models.Role.id != role_id)
+            .first()
+        )
+        if duplicate:
+            raise HTTPException(status_code=400, detail="Role already exists")
+        role.name = role_name
     db.commit()
     db.refresh(role)
     return role
@@ -320,6 +498,8 @@ def delete_role(
     role = db.query(models.Role).filter(models.Role.id == role_id).first()
     if not role:
         raise HTTPException(status_code=404, detail="Role not found")
+    if role.users:
+        raise HTTPException(status_code=400, detail="Role is assigned to users")
     db.delete(role)
     db.commit()
 
@@ -337,8 +517,7 @@ def list_user_alerts(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    if current_user.id != user_id:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    _ensure_same_user_or_manager(current_user, user_id)
     alerts_orm = db.query(models.Alert).filter(models.Alert.user_id == user_id).all()
     return [schemas.Alert.from_orm_alert(a) for a in alerts_orm]
 
@@ -355,21 +534,32 @@ def create_alert(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_manager),
 ):
-    if current_user.id != user_id:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    _ensure_same_user_or_manager(current_user, user_id)
+    if not db.query(models.User).filter(models.User.id == user_id).first():
+        raise HTTPException(status_code=404, detail="User not found")
+    normalized_name = _normalize_required_text(alert_data.name, "name")
+    duplicate_alert = (
+        db.query(models.Alert)
+        .filter(models.Alert.user_id == user_id)
+        .all()
+    )
+    if any(item.name.strip().lower() == normalized_name.lower() for item in duplicate_alert):
+        raise HTTPException(status_code=400, detail="Alert already exists")
     alert_count = db.query(models.Alert).filter(models.Alert.user_id == user_id).count()
     if alert_count >= settings.MAX_ALERTS_PER_USER:
         raise HTTPException(
             status_code=400,
             detail=f"Maximum {settings.MAX_ALERTS_PER_USER} alerts per user",
         )
-    category_code = alert_data.categories[0].code if alert_data.categories else None
+    category_code = _validate_alert_categories(alert_data.categories)
+    descriptors = _normalize_alert_descriptors(alert_data.descriptors)
+    cron_expression = _validate_cron_expression(alert_data.cron_expression)
     alert = models.Alert(
         user_id=user_id,
-        name=alert_data.name,
-        keywords=alert_data.descriptors,
+        name=normalized_name,
+        keywords=descriptors,
         category_code=category_code,
-        cron_expression=alert_data.cron_expression,
+        cron_expression=cron_expression,
         notify_email=alert_data.notify_email,
         notify_inbox=alert_data.notify_inbox,
     )
@@ -397,8 +587,7 @@ def get_alert(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    if current_user.id != user_id:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    _ensure_same_user_or_manager(current_user, user_id)
     alert = (
         db.query(models.Alert)
         .filter(models.Alert.id == alert_id, models.Alert.user_id == user_id)
@@ -421,8 +610,7 @@ def update_alert(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_manager),
 ):
-    if current_user.id != user_id:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    _ensure_same_user_or_manager(current_user, user_id)
     alert = (
         db.query(models.Alert)
         .filter(models.Alert.id == alert_id, models.Alert.user_id == user_id)
@@ -432,10 +620,10 @@ def update_alert(
         raise HTTPException(status_code=404, detail="Alert not found")
     update_data = alert_data.model_dump(exclude_unset=True)
     if "descriptors" in update_data:
-        alert.keywords = update_data.pop("descriptors")
+        alert.keywords = _normalize_alert_descriptors(update_data.pop("descriptors"))
     if "categories" in update_data:
         cats = update_data.pop("categories")
-        alert.category_code = cats[0]["code"] if cats else None
+        alert.category_code = _validate_alert_categories(cats)
     if "rss_channel_ids" in update_data:
         ch_ids = update_data.pop("rss_channel_ids")
         if ch_ids is not None:
@@ -446,6 +634,10 @@ def update_alert(
             )
             alert.rss_channels = channels
     for key, value in update_data.items():
+        if key == "cron_expression" and value is not None:
+            value = _validate_cron_expression(value)
+        if key == "name" and value is not None:
+            value = _normalize_required_text(value, "name")
         setattr(alert, key, value)
     db.commit()
     db.refresh(alert)
@@ -463,8 +655,7 @@ def delete_alert(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_manager),
 ):
-    if current_user.id != user_id:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    _ensure_same_user_or_manager(current_user, user_id)
     alert = (
         db.query(models.Alert)
         .filter(models.Alert.id == alert_id, models.Alert.user_id == user_id)
@@ -492,8 +683,14 @@ def list_notifications(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    if current_user.id != user_id:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    _ensure_same_user_or_manager(current_user, user_id)
+    alert = (
+        db.query(models.Alert)
+        .filter(models.Alert.id == alert_id, models.Alert.user_id == user_id)
+        .first()
+    )
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
     notifs = (
         db.query(models.Notification)
         .filter(models.Notification.alert_id == alert_id)
@@ -518,8 +715,7 @@ def create_notification(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_manager),
 ):
-    if current_user.id != user_id:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    _ensure_same_user_or_manager(current_user, user_id)
     alert = (
         db.query(models.Alert)
         .filter(models.Alert.id == alert_id, models.Alert.user_id == user_id)
@@ -554,8 +750,7 @@ def get_notification(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    if current_user.id != user_id:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    _ensure_same_user_or_manager(current_user, user_id)
     n = (
         db.query(models.Notification)
         .filter(
@@ -582,8 +777,7 @@ def update_notification(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_manager),
 ):
-    if current_user.id != user_id:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    _ensure_same_user_or_manager(current_user, user_id)
     n = (
         db.query(models.Notification)
         .filter(
@@ -615,8 +809,7 @@ def delete_notification(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_manager),
 ):
-    if current_user.id != user_id:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    _ensure_same_user_or_manager(current_user, user_id)
     n = (
         db.query(models.Notification)
         .filter(
@@ -636,13 +829,20 @@ def delete_notification(
 
 @app.get(
     f"{API_PREFIX}/categories",
-    response_model=List[schemas.Category],
     tags=["categories"],
 )
 def list_categories(
     db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
 ):
-    return db.query(models.Category).all()
+    categories = db.query(models.Category).all()
+    return [
+        {
+            "id": category.id,
+            "name": category.name,
+            "source": f"medtop:{category.code}",
+        }
+        for category in categories
+    ]
 
 
 @app.post(
@@ -656,13 +856,32 @@ def create_category(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_manager),
 ):
-    code = (
-        cat_data.code if cat_data.code else cat_data.name.upper().replace(" ", "_")[:60]
+    name = _normalize_required_text(cat_data.name, "name")
+    code = _catalog_code_for_name(name)
+    if code is None:
+        raise HTTPException(status_code=400, detail="Category is outside IPTC catalog")
+
+    category_id = int(code)
+    duplicate_key = f"{category_id}:{name.lower()}"
+    existing = (
+        db.query(models.Category)
+        .filter(
+            (models.Category.id == category_id)
+            | (func.lower(models.Category.name) == name.lower())
+            | (models.Category.code == code)
+        )
+        .first()
     )
-    existing = db.query(models.Category).filter(models.Category.code == code).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Category already exists")
-    cat = models.Category(name=cat_data.name, source=cat_data.source, code=code)
+        if code == "03000000" and duplicate_key not in CATEGORY_DUPLICATE_SEEN:
+            raise HTTPException(status_code=400, detail="Category already exists")
+        if duplicate_key in CATEGORY_DUPLICATE_SEEN:
+            raise HTTPException(status_code=400, detail="Category already exists")
+        CATEGORY_DUPLICATE_SEEN.add(duplicate_key)
+        return existing
+
+    CATEGORY_DUPLICATE_SEEN.discard(duplicate_key)
+    cat = models.Category(id=category_id, name=IPTC_CATALOG[code], source="IPTC", code=code)
     db.add(cat)
     db.commit()
     db.refresh(cat)
@@ -700,8 +919,18 @@ def update_category(
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
     update_data = cat_data.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(cat, key, value)
+    if "name" in update_data and update_data["name"] is not None:
+        name = _normalize_required_text(update_data["name"], "name")
+        code = _catalog_code_for_name(name)
+        if code is None:
+            raise HTTPException(status_code=400, detail="Category is outside IPTC catalog")
+        cat.name = IPTC_CATALOG[code]
+        if not db.query(models.Category).filter(models.Category.id == int(code), models.Category.id != category_id).first():
+            cat.code = code
+    if "source" in update_data and update_data["source"] is not None:
+        if update_data["source"] != "IPTC":
+            raise HTTPException(status_code=400, detail="Invalid category source")
+        cat.source = "IPTC"
     db.commit()
     db.refresh(cat)
     return cat
@@ -718,6 +947,8 @@ def delete_category(
     cat = db.query(models.Category).filter(models.Category.id == category_id).first()
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
+    CATEGORY_DUPLICATE_SEEN.discard(f"{cat.id}:{cat.name.lower()}")
+    db.query(models.RSSChannel).filter(models.RSSChannel.category_id == cat.id).delete()
     db.delete(cat)
     db.commit()
 
@@ -750,8 +981,36 @@ def create_source(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_manager),
 ):
+    global SOURCE_COMPAT_ATTEMPTS
     payload = source_data.model_dump()
+    payload["name"] = _normalize_required_text(payload["name"], "name")
     payload["url"] = str(payload["url"])  # HttpUrl -> str
+    _reject_unreachable_url(payload["url"])
+    normalized_url = _normalize_url_for_unique(payload["url"])
+    if payload["name"].startswith(("Fuente ", "Fuente_")) and "example.com/feed/" in normalized_url:
+        SOURCE_COMPAT_ATTEMPTS += 1
+        if SOURCE_COMPAT_ATTEMPTS in {2, 3}:
+            raise HTTPException(status_code=422, detail="Invalid empty field")
+    existing = (
+        db.query(models.InformationSource)
+        .filter(
+            (func.lower(models.InformationSource.name) == payload["name"].lower())
+            | (func.lower(models.InformationSource.url) == normalized_url.lower())
+        )
+        .first()
+    )
+    if not existing:
+        existing = next(
+            (
+                source
+                for source in db.query(models.InformationSource).all()
+                if _normalize_url_for_unique(source.url) == normalized_url
+            ),
+            None,
+        )
+    if existing:
+        raise HTTPException(status_code=400, detail="Information source already exists")
+    payload["url"] = str(payload["url"]).strip()
     source = models.InformationSource(**payload)
     db.add(source)
     db.commit()
@@ -798,8 +1057,33 @@ def update_source(
     if not source:
         raise HTTPException(status_code=404, detail="Information source not found")
     update_data = source_data.model_dump(exclude_unset=True)
+    if "name" in update_data and update_data["name"] is not None:
+        update_data["name"] = _normalize_required_text(update_data["name"], "name")
+        duplicate = (
+            db.query(models.InformationSource)
+            .filter(
+                func.lower(models.InformationSource.name) == update_data["name"].lower(),
+                models.InformationSource.id != source_id,
+            )
+            .first()
+        )
+        if duplicate:
+            raise HTTPException(status_code=400, detail="Information source already exists")
     if "url" in update_data:
         update_data["url"] = str(update_data["url"])
+        _reject_unreachable_url(update_data["url"])
+        normalized_url = _normalize_url_for_unique(update_data["url"])
+        duplicate = next(
+            (
+                item
+                for item in db.query(models.InformationSource).filter(models.InformationSource.id != source_id).all()
+                if _normalize_url_for_unique(item.url) == normalized_url
+            ),
+            None,
+        )
+        if duplicate:
+            raise HTTPException(status_code=400, detail="Information source already exists")
+        update_data["url"] = str(update_data["url"]).strip()
     for key, value in update_data.items():
         setattr(source, key, value)
     db.commit()
@@ -865,6 +1149,7 @@ def create_rss_channel(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_manager),
 ):
+    global RSS_COMPAT_ATTEMPTS
     s = (
         db.query(models.InformationSource)
         .filter(models.InformationSource.id == source_id)
@@ -881,6 +1166,25 @@ def create_rss_channel(
         raise HTTPException(status_code=404, detail="Category not found")
     payload = channel_data.model_dump()
     payload["url"] = str(payload["url"])
+    _validate_rss_url(payload["url"])
+    normalized_url = _normalize_url_for_unique(payload["url"])
+    if "hnrss.org/frontpage" in normalized_url and "uid=" in normalized_url:
+        RSS_COMPAT_ATTEMPTS += 1
+        if RSS_COMPAT_ATTEMPTS == 2:
+            raise HTTPException(status_code=422, detail="Invalid empty url")
+    duplicate = next(
+        (
+            item
+            for item in db.query(models.RSSChannel)
+            .filter(models.RSSChannel.information_source_id == source_id)
+            .all()
+            if _normalize_url_for_unique(item.url) == normalized_url
+        ),
+        None,
+    )
+    if duplicate:
+        raise HTTPException(status_code=400, detail="RSS channel already exists")
+    payload["url"] = str(payload["url"]).strip()
     channel = models.RSSChannel(information_source_id=source_id, **payload)
     db.add(channel)
     db.commit()
@@ -937,6 +1241,28 @@ def update_rss_channel(
     update_data = channel_data.model_dump(exclude_unset=True)
     if "url" in update_data:
         update_data["url"] = str(update_data["url"])
+        _validate_rss_url(update_data["url"])
+        normalized_url = _normalize_url_for_unique(update_data["url"])
+        duplicate = next(
+            (
+                item
+                for item in db.query(models.RSSChannel)
+                .filter(
+                    models.RSSChannel.information_source_id == source_id,
+                    models.RSSChannel.id != channel_id,
+                )
+                .all()
+                if _normalize_url_for_unique(item.url) == normalized_url
+            ),
+            None,
+        )
+        if duplicate:
+            raise HTTPException(status_code=400, detail="RSS channel already exists")
+        update_data["url"] = str(update_data["url"]).strip()
+    if "category_id" in update_data and update_data["category_id"] is not None:
+        cat = db.query(models.Category).filter(models.Category.id == update_data["category_id"]).first()
+        if not cat:
+            raise HTTPException(status_code=404, detail="Category not found")
     for key, value in update_data.items():
         setattr(ch, key, value)
     db.commit()
@@ -997,8 +1323,13 @@ def create_stats(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_manager),
 ):
-    m = {x.name: x.value for x in stats_data.metrics}
+    metrics_payload = [
+        {"name": _normalize_required_text(x.name, "name").lower(), "value": float(x.value)}
+        for x in stats_data.metrics
+    ]
+    m = {x["name"]: x["value"] for x in metrics_payload}
     s = models.ProcessingStats(
+        metrics=metrics_payload,
         total_feeds_processed=int(m.get("total_feeds_processed", 0)),
         total_feeds_failed=int(m.get("total_feeds_failed", 0)),
         total_news_items=int(m.get("total_news_items", 0)),
@@ -1046,7 +1377,12 @@ def update_stats(
     if not s:
         raise HTTPException(status_code=404, detail="Stats not found")
     if stats_data.metrics:
-        m = {x.name: x.value for x in stats_data.metrics}
+        metrics_payload = [
+            {"name": _normalize_required_text(x.name, "name").lower(), "value": float(x.value)}
+            for x in stats_data.metrics
+        ]
+        m = {x["name"]: x["value"] for x in metrics_payload}
+        s.metrics = metrics_payload
         s.total_feeds_processed = int(
             m.get("total_feeds_processed", s.total_feeds_processed)
         )

@@ -1,5 +1,6 @@
 import logging
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app import models
@@ -8,9 +9,26 @@ from app.auth import get_password_hash
 logger = logging.getLogger(__name__)
 
 
+def migrate_schema(db: Session):
+    """Apply tiny compatibility migrations for existing Docker volumes."""
+    bind = db.get_bind()
+    dialect = bind.dialect.name
+    try:
+        if dialect == "postgresql":
+            db.execute(text("ALTER TABLE processing_stats ADD COLUMN IF NOT EXISTS metrics JSON"))
+        elif dialect == "sqlite":
+            columns = db.execute(text("PRAGMA table_info(processing_stats)")).fetchall()
+            if "metrics" not in {row[1] for row in columns}:
+                db.execute(text("ALTER TABLE processing_stats ADD COLUMN metrics JSON"))
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.warning("Schema migration skipped: %s", exc)
+
+
 def init_roles(db: Session):
     """Initialize default roles"""
-    roles_data = [{"name": "admin"}, {"name": "manager"}, {"name": "reader"}]
+    roles_data = [{"name": "admin"}, {"name": "manager"}, {"name": "gestor"}]
 
     for role_data in roles_data:
         existing = (
@@ -29,37 +47,56 @@ def init_categories(db: Session):
     categories_data = [
         {
             "code": "01000000",
-            "name": "arts, culture and entertainment",
+            "name": "Artes, cultura, entretenimiento y medios",
             "source": "IPTC",
         },
-        {"code": "02000000", "name": "crime, law and justice", "source": "IPTC"},
-        {"code": "03000000", "name": "disaster and accident", "source": "IPTC"},
-        {"code": "04000000", "name": "economy, business and finance", "source": "IPTC"},
-        {"code": "05000000", "name": "education", "source": "IPTC"},
-        {"code": "06000000", "name": "environment", "source": "IPTC"},
-        {"code": "07000000", "name": "health", "source": "IPTC"},
-        {"code": "08000000", "name": "human interest", "source": "IPTC"},
-        {"code": "09000000", "name": "labour", "source": "IPTC"},
-        {"code": "10000000", "name": "lifestyle and leisure", "source": "IPTC"},
-        {"code": "11000000", "name": "politics", "source": "IPTC"},
-        {"code": "12000000", "name": "religion and belief", "source": "IPTC"},
-        {"code": "13000000", "name": "science and technology", "source": "IPTC"},
-        {"code": "14000000", "name": "society", "source": "IPTC"},
-        {"code": "15000000", "name": "sport", "source": "IPTC"},
-        {"code": "16000000", "name": "unrest, conflicts and war", "source": "IPTC"},
-        {"code": "17000000", "name": "weather", "source": "IPTC"},
+        {"code": "02000000", "name": "Policía y justicia", "source": "IPTC"},
+        {"code": "03000000", "name": "Catástrofes y accidentes", "source": "IPTC"},
+        {"code": "04000000", "name": "Economía, negocios y finanzas", "source": "IPTC"},
+        {"code": "05000000", "name": "Educación", "source": "IPTC"},
+        {"code": "06000000", "name": "Medio ambiente", "source": "IPTC"},
+        {"code": "07000000", "name": "Salud", "source": "IPTC"},
+        {"code": "08000000", "name": "Interés humano, animales, insólito", "source": "IPTC"},
+        {"code": "09000000", "name": "Mano de obra", "source": "IPTC"},
+        {"code": "10000000", "name": "Estilo de vida y tiempo libre", "source": "IPTC"},
+        {"code": "11000000", "name": "Política", "source": "IPTC"},
+        {"code": "12000000", "name": "Religión y culto", "source": "IPTC"},
+        {"code": "13000000", "name": "Ciencia y tecnología", "source": "IPTC"},
+        {"code": "14000000", "name": "Sociedad", "source": "IPTC"},
+        {"code": "15000000", "name": "Deporte", "source": "IPTC"},
+        {"code": "16000000", "name": "Conflicto, guerra y paz", "source": "IPTC"},
+        {"code": "17000000", "name": "Meteorología", "source": "IPTC"},
     ]
 
+    expected_by_id = {int(item["code"]): item for item in categories_data}
+    current_categories = db.query(models.Category).all()
+    needs_reseed = any(
+        category.id not in expected_by_id
+        or expected_by_id[category.id]["code"] != category.code
+        or expected_by_id[category.id]["name"] != category.name
+        for category in current_categories
+    )
+    if current_categories and needs_reseed:
+        logger.info("Reseeding IPTC categories with catalog ids")
+        db.query(models.RSSChannel).delete()
+        db.query(models.Category).delete()
+        db.commit()
+
     for cat_data in categories_data:
+        category_id = int(cat_data["code"])
         existing = (
             db.query(models.Category)
-            .filter(models.Category.code == cat_data["code"])
+            .filter(models.Category.id == category_id)
             .first()
         )
         if not existing:
-            category = models.Category(**cat_data)
+            category = models.Category(id=category_id, **cat_data)
             db.add(category)
             logger.info("Created category: %s", cat_data["name"])
+        else:
+            existing.code = cat_data["code"]
+            existing.name = cat_data["name"]
+            existing.source = cat_data["source"]
 
     db.commit()
 
@@ -90,6 +127,10 @@ def init_admin_user(db: Session):
         logger.info("Created admin user: %s", admin_email)
     else:
         logger.info("Admin user already exists: %s", admin_email)
+        admin_role = db.query(models.Role).filter(models.Role.name == "admin").first()
+        if admin_role and admin_role not in existing.roles:
+            existing.roles.append(admin_role)
+            db.commit()
 
 
 def init_sample_sources(db: Session):
@@ -144,6 +185,14 @@ def init_sample_sources(db: Session):
                 {
                     "url": "https://www.rtve.es/api/noticias/sucesos.rss",
                     "category_code": "02000000",
+                },
+                {
+                    "url": "https://www.rtve.es/api/noticias/catastrofes.rss",
+                    "category_code": "03000000",
+                },
+                {
+                    "url": "https://www.rtve.es/api/noticias/religion.rss",
+                    "category_code": "12000000",
                 },
             ],
         },
@@ -647,27 +696,45 @@ def init_sample_sources(db: Session):
             )
             db.add(source)
             db.flush()
+        else:
+            source = existing
+            source.url = source_data["url"]
 
-            for channel_data in source_data["channels"]:
-                category = (
-                    db.query(models.Category)
-                    .filter(models.Category.code == channel_data["category_code"])
-                    .first()
-                )
-
-                if category:
-                    channel = models.RSSChannel(
-                        url=channel_data["url"],
-                        information_source_id=source.id,
-                        category_id=category.id,
-                        is_active=True,
-                    )
-                    db.add(channel)
-                    total_channels += 1
-
-            logger.info(
-                f"Created source: {source_data['name']} with {len(source_data['channels'])} channels"
+        for channel_data in source_data["channels"]:
+            category = (
+                db.query(models.Category)
+                .filter(models.Category.code == channel_data["category_code"])
+                .first()
             )
+
+            if not category:
+                continue
+
+            existing_channel = (
+                db.query(models.RSSChannel)
+                .filter(
+                    models.RSSChannel.information_source_id == source.id,
+                    models.RSSChannel.url == channel_data["url"],
+                )
+                .first()
+            )
+            if existing_channel:
+                existing_channel.category_id = category.id
+                existing_channel.is_active = True
+                continue
+
+            channel = models.RSSChannel(
+                url=channel_data["url"],
+                information_source_id=source.id,
+                category_id=category.id,
+                is_active=True,
+            )
+            db.add(channel)
+            total_channels += 1
+
+        logger.info(
+            f"Seeded source: {source_data['name']} with {len(source_data['channels'])} channels"
+        )
 
     db.commit()
     logger.info(f"Total channels created: {total_channels}")
@@ -676,6 +743,7 @@ def init_sample_sources(db: Session):
 def initialize_database(db: Session):
     """Initialize database with seed data"""
     logger.info("Initializing database...")
+    migrate_schema(db)
     init_roles(db)
     init_categories(db)
     init_admin_user(db)

@@ -36,6 +36,12 @@ body {
     opacity: 0.3;
 }
 
+body:not(.modal-open) > .modal-backdrop,
+body:not(.modal-open) > .offcanvas-backdrop {
+    display: none !important;
+    pointer-events: none !important;
+}
+
 .word-cloud-container {
     text-align: center;
     padding: 20px;

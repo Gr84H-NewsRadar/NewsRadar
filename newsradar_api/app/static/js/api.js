@@ -202,11 +202,27 @@ function getCurrentUser() {
     return u ? JSON.parse(u) : null;
 }
 
+function clearStaleUiOverlays() {
+    if (document.querySelector('.modal.show')) return;
+
+    document.body.classList.remove('modal-open');
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('padding-right');
+
+    document.querySelectorAll('.modal-backdrop, .offcanvas-backdrop').forEach((backdrop) => {
+        backdrop.remove();
+    });
+}
+
 function isReader() {
     const u = getCurrentUser();
     if (!u || !u.roles) return true;
     return !u.roles.some(r => ['admin', 'manager'].includes(r.name));
 }
+
+document.addEventListener('DOMContentLoaded', clearStaleUiOverlays);
+window.addEventListener('pageshow', clearStaleUiOverlays);
+window.addEventListener('beforeunload', clearStaleUiOverlays);
 
 // Auto-protect non-public pages
 if (!window.location.pathname.includes('index.html') && !window.location.pathname.includes('register.html')) {
