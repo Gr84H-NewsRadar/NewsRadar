@@ -172,6 +172,9 @@ class AlertBase(BaseModel):
     categories: List[AlertCategoryItem] = Field(
         default_factory=list
     )  # = category_code internamente
+    # Parche enunciado profe (aviso 28/04/2026): permitir asociar RSS y fuentes a la alerta
+    rss_channels_ids: List[str] = Field(default_factory=list)
+    information_sources_ids: List[str] = Field(default_factory=list)
     cron_expression: str = Field(..., min_length=1, max_length=120)
 
 
@@ -186,6 +189,9 @@ class AlertUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     descriptors: Optional[List[str]] = None
     categories: Optional[List[AlertCategoryItem]] = None
+    # Parche enunciado profe (aviso 28/04/2026): permitir asociar RSS y fuentes a la alerta
+    rss_channels_ids: List[str] = Field(default_factory=list)
+    information_sources_ids: List[str] = Field(default_factory=list)
     cron_expression: Optional[str] = Field(None, min_length=1, max_length=120)
     is_active: Optional[bool] = None
     notify_email: Optional[bool] = None
@@ -211,12 +217,29 @@ class Alert(AlertBase):
                     code=alert_orm.category_code, label=alert_orm.category_code
                 )
             ]
+        # Parche profe: poblamos rss_channels_ids e information_sources_ids
+        # a partir de los canales RSS asociados (lista N-N en BD).
+        rss_ids: List[str] = []
+        info_src_ids: List[str] = []
+        try:
+            channels = list(alert_orm.rss_channels or [])
+        except Exception:
+            channels = []
+        for ch in channels:
+            if getattr(ch, "id", None) is not None:
+                rss_ids.append(str(ch.id))
+            if getattr(ch, "information_source_id", None) is not None:
+                info_src_ids.append(str(ch.information_source_id))
+        # Eliminamos duplicados de fuentes preservando el orden
+        info_src_ids = list(dict.fromkeys(info_src_ids))
         return cls(
             id=alert_orm.id,
             user_id=alert_orm.user_id,
             name=alert_orm.name,
             descriptors=alert_orm.keywords or [],
             categories=cats,
+            rss_channels_ids=rss_ids,
+            information_sources_ids=info_src_ids,
             cron_expression=alert_orm.cron_expression or "0 */6 * * *",
         )
 
