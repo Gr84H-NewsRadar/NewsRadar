@@ -15,7 +15,11 @@ def migrate_schema(db: Session):
     dialect = bind.dialect.name
     try:
         if dialect == "postgresql":
-            db.execute(text("ALTER TABLE processing_stats ADD COLUMN IF NOT EXISTS metrics JSON"))
+            db.execute(
+                text(
+                    "ALTER TABLE processing_stats ADD COLUMN IF NOT EXISTS metrics JSON"
+                )
+            )
         elif dialect == "sqlite":
             columns = db.execute(text("PRAGMA table_info(processing_stats)")).fetchall()
             if "metrics" not in {row[1] for row in columns}:
@@ -56,7 +60,11 @@ def init_categories(db: Session):
         {"code": "05000000", "name": "Educación", "source": "IPTC"},
         {"code": "06000000", "name": "Medio ambiente", "source": "IPTC"},
         {"code": "07000000", "name": "Salud", "source": "IPTC"},
-        {"code": "08000000", "name": "Interés humano, animales, insólito", "source": "IPTC"},
+        {
+            "code": "08000000",
+            "name": "Interés humano, animales, insólito",
+            "source": "IPTC",
+        },
         {"code": "09000000", "name": "Mano de obra", "source": "IPTC"},
         {"code": "10000000", "name": "Estilo de vida y tiempo libre", "source": "IPTC"},
         {"code": "11000000", "name": "Política", "source": "IPTC"},
@@ -85,9 +93,7 @@ def init_categories(db: Session):
     for cat_data in categories_data:
         category_id = int(cat_data["code"])
         existing = (
-            db.query(models.Category)
-            .filter(models.Category.id == category_id)
-            .first()
+            db.query(models.Category).filter(models.Category.id == category_id).first()
         )
         if not existing:
             category = models.Category(id=category_id, **cat_data)

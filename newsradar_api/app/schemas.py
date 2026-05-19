@@ -315,7 +315,10 @@ class Stats(StatsBase):
         if getattr(stats_orm, "metrics", None):
             return cls(
                 id=stats_orm.id,
-                metrics=[Metric(name=str(item["name"]), value=float(item["value"])) for item in stats_orm.metrics],
+                metrics=[
+                    Metric(name=str(item["name"]), value=float(item["value"]))
+                    for item in stats_orm.metrics
+                ],
             )
         metrics = [
             Metric(

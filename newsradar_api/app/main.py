@@ -93,15 +93,25 @@ def _normalize_required_text(value: str, field_name: str) -> str:
     if not normalized:
         raise HTTPException(status_code=422, detail=f"{field_name} cannot be blank")
     if "\n" in normalized or "\r" in normalized:
-        raise HTTPException(status_code=422, detail=f"{field_name} contains invalid characters")
+        raise HTTPException(
+            status_code=422, detail=f"{field_name} contains invalid characters"
+        )
     if "<script" in normalized.lower():
-        raise HTTPException(status_code=422, detail=f"{field_name} contains unsafe markup")
+        raise HTTPException(
+            status_code=422, detail=f"{field_name} contains unsafe markup"
+        )
     return normalized
 
 
-def _validate_user_roles(db: Session, role_ids: Optional[List[int]]) -> List[models.Role]:
+def _validate_user_roles(
+    db: Session, role_ids: Optional[List[int]]
+) -> List[models.Role]:
     if not role_ids:
-        gestor_role = db.query(models.Role).filter(func.lower(models.Role.name) == "gestor").first()
+        gestor_role = (
+            db.query(models.Role)
+            .filter(func.lower(models.Role.name) == "gestor")
+            .first()
+        )
         if not gestor_role:
             raise HTTPException(status_code=400, detail="Default role gestor not found")
         return [gestor_role]
@@ -116,7 +126,11 @@ def _validate_user_roles(db: Session, role_ids: Optional[List[int]]) -> List[mod
 
 
 def _authenticate_user(db: Session, email: str, password: str) -> models.User:
-    user = db.query(models.User).filter(func.lower(models.User.email) == email.strip().lower()).first()
+    user = (
+        db.query(models.User)
+        .filter(func.lower(models.User.email) == email.strip().lower())
+        .first()
+    )
     if not user or not verify_password(password, user.hashed_password):
         raise HTTPException(
             status_code=401,
@@ -137,7 +151,9 @@ def _normalize_url_for_unique(url: str) -> str:
     parsed = urlsplit(str(url).strip())
     host = parsed.netloc.lower()
     path = parsed.path.rstrip("/").lower()
-    return urlunsplit((parsed.scheme.lower(), host, path, parsed.query.rstrip("/").lower(), ""))
+    return urlunsplit(
+        (parsed.scheme.lower(), host, path, parsed.query.rstrip("/").lower(), "")
+    )
 
 
 def _reject_unreachable_url(url: str) -> None:
@@ -151,7 +167,11 @@ def _validate_rss_url(url: str) -> None:
     _reject_unreachable_url(normalized)
     if "api.github.com" in normalized:
         raise HTTPException(status_code=400, detail="URL is not an RSS feed")
-    if "rss" not in normalized and "feed" not in normalized and "hnrss.org" not in normalized:
+    if (
+        "rss" not in normalized
+        and "feed" not in normalized
+        and "hnrss.org" not in normalized
+    ):
         raise HTTPException(status_code=400, detail="URL is not an RSS feed")
 
 
@@ -195,7 +215,9 @@ def _normalize_alert_descriptors(descriptors: Optional[List[str]]) -> List[str]:
     return normalized[:10]
 
 
-def _validate_alert_categories(categories: Optional[List[schemas.AlertCategoryItem]]) -> Optional[str]:
+def _validate_alert_categories(
+    categories: Optional[List[schemas.AlertCategoryItem]],
+) -> Optional[str]:
     if not categories:
         return None
     first = categories[0]
@@ -206,7 +228,9 @@ def _validate_alert_categories(categories: Optional[List[schemas.AlertCategoryIt
         raise HTTPException(status_code=400, detail="Category not found")
     label = (first.get("label") if isinstance(first, dict) else first.label).strip()
     if label and label != code and label.lower() != IPTC_CATALOG[code].lower():
-        raise HTTPException(status_code=400, detail="Category label does not match code")
+        raise HTTPException(
+            status_code=400, detail="Category label does not match code"
+        )
     return code
 
 
@@ -277,7 +301,9 @@ async def register(
     db: Session = Depends(get_db),
 ):
     email = str(user_data.email).strip().lower()
-    existing = db.query(models.User).filter(func.lower(models.User.email) == email).first()
+    existing = (
+        db.query(models.User).filter(func.lower(models.User.email) == email).first()
+    )
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
@@ -339,7 +365,9 @@ async def create_user(
     current_user: models.User = Depends(require_manager),
 ):
     email = str(user_data.email).strip().lower()
-    existing = db.query(models.User).filter(func.lower(models.User.email) == email).first()
+    existing = (
+        db.query(models.User).filter(func.lower(models.User.email) == email).first()
+    )
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     verification_token = secrets.token_urlsafe(32)
@@ -412,7 +440,9 @@ def update_user(
     return user
 
 
-@app.patch(f"{API_PREFIX}/users/{{user_id}}", response_model=schemas.User, tags=["users"])
+@app.patch(
+    f"{API_PREFIX}/users/{{user_id}}", response_model=schemas.User, tags=["users"]
+)
 def patch_user(
     user_id: int,
     user_data: schemas.UserUpdate,
@@ -454,7 +484,11 @@ def create_role(
     current_user: models.User = Depends(require_manager),
 ):
     role_name = _normalize_required_text(role_data.name, "name")
-    existing = db.query(models.Role).filter(func.lower(models.Role.name) == role_name.lower()).first()
+    existing = (
+        db.query(models.Role)
+        .filter(func.lower(models.Role.name) == role_name.lower())
+        .first()
+    )
     if existing:
         raise HTTPException(status_code=400, detail="Role already exists")
     role = models.Role(name=role_name)
@@ -490,7 +524,10 @@ def update_role(
         role_name = _normalize_required_text(role_data.name, "name")
         duplicate = (
             db.query(models.Role)
-            .filter(func.lower(models.Role.name) == role_name.lower(), models.Role.id != role_id)
+            .filter(
+                func.lower(models.Role.name) == role_name.lower(),
+                models.Role.id != role_id,
+            )
             .first()
         )
         if duplicate:
@@ -551,11 +588,11 @@ def create_alert(
         raise HTTPException(status_code=404, detail="User not found")
     normalized_name = _normalize_required_text(alert_data.name, "name")
     duplicate_alert = (
-        db.query(models.Alert)
-        .filter(models.Alert.user_id == user_id)
-        .all()
+        db.query(models.Alert).filter(models.Alert.user_id == user_id).all()
     )
-    if any(item.name.strip().lower() == normalized_name.lower() for item in duplicate_alert):
+    if any(
+        item.name.strip().lower() == normalized_name.lower() for item in duplicate_alert
+    ):
         raise HTTPException(status_code=400, detail="Alert already exists")
     alert_count = db.query(models.Alert).filter(models.Alert.user_id == user_id).count()
     if alert_count >= settings.MAX_ALERTS_PER_USER:
@@ -838,6 +875,7 @@ def delete_notification(
 
 # ==================== CATEGORIES ====================
 
+
 @app.get(
     f"{API_PREFIX}/categories",
     tags=["categories"],
@@ -849,12 +887,13 @@ def list_categories(
     categories = db.query(models.Category).order_by(models.Category.id).all()
     return [
         {
-            "id": category.id,          # entero: 1000000, 2000000, ...
+            "id": category.id,  # entero: 1000000, 2000000, ...
             "name": category.name,
             "source": category.source or "IPTC",
         }
         for category in categories
     ]
+
 
 @app.post(
     f"{API_PREFIX}/categories",
@@ -884,7 +923,10 @@ def create_category(
     if (
         source_lower == "iptc"
         and code == "03000000"
-        and db.query(models.Category).filter(models.Category.id == int("01000000")).first() is None
+        and db.query(models.Category)
+        .filter(models.Category.id == int("01000000"))
+        .first()
+        is None
     ):
         raise HTTPException(
             status_code=400,
@@ -941,6 +983,7 @@ def create_category(
     db.refresh(cat)
     return cat
 
+
 @app.get(
     f"{API_PREFIX}/categories/{{category_id}}",
     response_model=schemas.Category,
@@ -955,6 +998,7 @@ def get_category(
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
     return cat
+
 
 @app.put(
     f"{API_PREFIX}/categories/{{category_id}}",
@@ -1153,13 +1197,16 @@ def update_source(
         duplicate = (
             db.query(models.InformationSource)
             .filter(
-                func.lower(models.InformationSource.name) == update_data["name"].lower(),
+                func.lower(models.InformationSource.name)
+                == update_data["name"].lower(),
                 models.InformationSource.id != source_id,
             )
             .first()
         )
         if duplicate:
-            raise HTTPException(status_code=400, detail="Information source already exists")
+            raise HTTPException(
+                status_code=400, detail="Information source already exists"
+            )
     if "url" in update_data:
         update_data["url"] = str(update_data["url"])
         _reject_unreachable_url(update_data["url"])
@@ -1167,13 +1214,17 @@ def update_source(
         duplicate = next(
             (
                 item
-                for item in db.query(models.InformationSource).filter(models.InformationSource.id != source_id).all()
+                for item in db.query(models.InformationSource)
+                .filter(models.InformationSource.id != source_id)
+                .all()
                 if _normalize_url_for_unique(item.url) == normalized_url
             ),
             None,
         )
         if duplicate:
-            raise HTTPException(status_code=400, detail="Information source already exists")
+            raise HTTPException(
+                status_code=400, detail="Information source already exists"
+            )
         update_data["url"] = str(update_data["url"]).strip()
     for key, value in update_data.items():
         setattr(source, key, value)
@@ -1346,7 +1397,11 @@ def update_rss_channel(
             raise HTTPException(status_code=400, detail="RSS channel already exists")
         update_data["url"] = str(update_data["url"]).strip()
     if "category_id" in update_data and update_data["category_id"] is not None:
-        cat = db.query(models.Category).filter(models.Category.id == update_data["category_id"]).first()
+        cat = (
+            db.query(models.Category)
+            .filter(models.Category.id == update_data["category_id"])
+            .first()
+        )
         if not cat:
             raise HTTPException(status_code=404, detail="Category not found")
     for key, value in update_data.items():
@@ -1410,7 +1465,10 @@ def create_stats(
     current_user: models.User = Depends(require_manager),
 ):
     metrics_payload = [
-        {"name": _normalize_required_text(x.name, "name").lower(), "value": float(x.value)}
+        {
+            "name": _normalize_required_text(x.name, "name").lower(),
+            "value": float(x.value),
+        }
         for x in stats_data.metrics
     ]
     m = {x["name"]: x["value"] for x in metrics_payload}
@@ -1464,7 +1522,10 @@ def update_stats(
         raise HTTPException(status_code=404, detail="Stats not found")
     if stats_data.metrics:
         metrics_payload = [
-            {"name": _normalize_required_text(x.name, "name").lower(), "value": float(x.value)}
+            {
+                "name": _normalize_required_text(x.name, "name").lower(),
+                "value": float(x.value),
+            }
             for x in stats_data.metrics
         ]
         m = {x["name"]: x["value"] for x in metrics_payload}
