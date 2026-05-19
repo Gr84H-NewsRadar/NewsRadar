@@ -86,18 +86,17 @@ class User(UserBase):
 
 
 class CategoryBase(BaseModel):
-    # El profe NO incluye 'code' en el schema externo, solo 'name' y 'source'
     name: str = Field(..., min_length=1, max_length=120)
-    source: str = Field(default="IPTC", pattern="^IPTC$")
+    source: str = Field(default="IPTC", pattern=r"^(IPTC|iptc|medtop:\d{8})$")
 
 
 class CategoryCreate(CategoryBase):
-    source: str = Field(..., pattern="^IPTC$")
+    source: str = Field(..., pattern=r"^(IPTC|iptc|medtop:\d{8})$")
 
 
 class CategoryUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=120)
-    source: Optional[str] = Field(None, pattern="^IPTC$")
+    source: Optional[str] = Field(None, pattern=r"^(IPTC|iptc|medtop:\d{8})$")
 
 
 class Category(CategoryBase):
