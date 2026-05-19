@@ -112,8 +112,12 @@ def _validate_user_roles(
             .filter(func.lower(models.Role.name) == "gestor")
             .first()
         )
+
         if not gestor_role:
-            raise HTTPException(status_code=400, detail="Default role gestor not found")
+            gestor_role = models.Role(name="gestor")
+            db.add(gestor_role)
+            db.flush()
+
         return [gestor_role]
 
     if len(role_ids) != 1:
@@ -122,6 +126,7 @@ def _validate_user_roles(
     role = db.query(models.Role).filter(models.Role.id == role_ids[0]).first()
     if not role:
         raise HTTPException(status_code=404, detail="Role not found")
+
     return [role]
 
 
