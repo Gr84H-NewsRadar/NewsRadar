@@ -2,12 +2,26 @@
 
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    min-height: 100vh;
 }
 
 #sidebar {
     box-shadow: 2px 0 8px rgba(0,0,0,0.1);
     display: flex;
     flex-direction: column;
+    flex: none;
+    height: 100vh;
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 240px !important;
+    overflow-y: auto;
+}
+
+body > .d-flex > main {
+    margin-left: 240px;
+    min-height: 100vh;
+    width: calc(100% - 240px);
 }
 
 #sidebar .nav-link {
@@ -29,6 +43,111 @@ body {
 .card {
     border: none;
     border-radius: 8px;
+}
+
+.app-toast-container {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 2000;
+    width: min(420px, calc(100vw - 32px));
+}
+
+.app-toast {
+    border-radius: 6px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+    color: #fff;
+    margin-bottom: 10px;
+    padding: 12px 14px;
+    animation: toast-slide-in 0.18s ease-out;
+}
+
+.app-toast.success { background: #146c43; }
+.app-toast.info { background: #084298; }
+.app-toast.error { background: #b02a37; }
+
+.app-popup-backdrop {
+    align-items: center;
+    background: rgba(0,0,0,0.35);
+    display: flex;
+    inset: 0;
+    justify-content: center;
+    padding: 20px;
+    position: fixed;
+    z-index: 2500;
+}
+
+.app-popup {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 18px 48px rgba(0,0,0,0.25);
+    max-width: 520px;
+    overflow: hidden;
+    width: 100%;
+}
+
+.app-popup-header {
+    align-items: center;
+    border-bottom: 1px solid #dee2e6;
+    display: flex;
+    justify-content: space-between;
+    padding: 14px 16px;
+}
+
+.app-popup-body {
+    color: #343a40;
+    padding: 16px;
+}
+
+.app-popup-actions {
+    border-top: 1px solid #dee2e6;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    padding: 12px 16px;
+}
+
+.app-status {
+    align-items: center;
+    background: #eef4ff;
+    border: 1px solid #cfe2ff;
+    border-radius: 6px;
+    color: #084298;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+}
+
+.app-status.success {
+    background: #eaf7ef;
+    border-color: #badbcc;
+    color: #0f5132;
+}
+
+.app-status.error {
+    background: #f8d7da;
+    border-color: #f1aeb5;
+    color: #842029;
+}
+
+.loading-line {
+    background: linear-gradient(90deg, #f1f3f5 25%, #e9ecef 37%, #f1f3f5 63%);
+    background-size: 400% 100%;
+    border-radius: 6px;
+    height: 54px;
+    margin-bottom: 10px;
+    animation: loading-shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes toast-slide-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes loading-shimmer {
+    0% { background-position: 100% 0; }
+    100% { background-position: 0 0; }
 }
 
 .kpi-icon {

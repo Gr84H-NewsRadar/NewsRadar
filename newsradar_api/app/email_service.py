@@ -86,7 +86,7 @@ async def send_cycle_summary(
     statistics: dict,
 ):
     """Send a single summary email per alert after each processing cycle"""
-    subject = f"Actualización de alerta: {alert_name} en {timestamp_display}"
+    subject = f"Actualización de {alert_name} en {timestamp_display}"
 
     news_processed = statistics.get("news_processed", 0)
     matches_count = statistics.get("matches_count", 0)

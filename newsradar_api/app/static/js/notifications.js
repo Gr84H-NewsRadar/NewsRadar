@@ -22,6 +22,7 @@ async function loadNotifications() {
                 </div>
             `;
         }).join('');
+        await api.markNotificationsRead(me.id);
     } catch (err) {
         list.innerHTML = `<p class="text-danger">Error: ${err.message}</p>`;
     }

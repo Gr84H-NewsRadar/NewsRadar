@@ -32,6 +32,12 @@
                 <div>
                     <button class="btn btn-outline-dark me-2" id="tab-sources" onclick="showTab('sources')" data-i18n="sources_tab">FUENTES</button>
                     <button class="btn btn-outline-dark me-2" id="tab-channels" onclick="showTab('channels')" data-i18n="channels_tab">CANALES RSS</button>
+                    <button class="btn btn-outline-dark me-2" onclick="processRssNow()" id="btn-process-rss">
+                        <i class="bi bi-arrow-repeat"></i> Procesar RSS
+                    </button>
+                    <button class="btn btn-outline-dark me-2" onclick="openChannelModal()" id="btn-add-channel">
+                        <i class="bi bi-rss"></i> Añadir Canal
+                    </button>
                     <button class="btn btn-dark" onclick="openSourceModal()" id="btn-add-source">
                         <i class="bi bi-plus"></i> <span data-i18n="add_source">Añadir Fuente</span>
                     </button>
@@ -40,12 +46,44 @@
 
             <div class="card shadow-sm">
                 <div class="card-body">
+                    <div id="sources-status" class="app-status" style="display:none"></div>
                     <input type="text" class="form-control mb-3" id="filter-input" placeholder="Filtrar..." oninput="filterList()">
                     <div id="sources-list"></div>
                     <div id="channels-list" style="display:none;"></div>
                 </div>
             </div>
         </main>
+    </div>
+
+    <div class="modal fade" id="channelModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">AÑADIR CANAL RSS</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="channel-form">
+                        <div class="mb-3">
+                            <label class="form-label">FUENTE</label>
+                            <select class="form-select" id="channel-source" required onchange="syncChannelUrl()"></select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">URL RSS</label>
+                            <input type="url" class="form-control" id="channel-url" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">CATEGORÍA</label>
+                            <select class="form-select" id="channel-category" required></select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-light" data-bs-dismiss="modal" data-i18n="cancel">CANCELAR</button>
+                    <button class="btn btn-dark" onclick="saveChannel()">GUARDAR CANAL</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Modal -->

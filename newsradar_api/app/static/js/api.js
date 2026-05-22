@@ -95,6 +95,20 @@ const api = {
         return api._handle(resp);
     },
 
+    createChannel: async (sourceId, data) => {
+        const resp = await fetch(`${API_BASE}/information-sources/${sourceId}/rss-channels`, {
+            method: 'POST', headers: api._headers(), body: JSON.stringify(data)
+        });
+        return api._handle(resp);
+    },
+
+    processRss: async () => {
+        const resp = await fetch(`${API_BASE}/process-rss`, {
+            method: 'POST', headers: api._headers()
+        });
+        return api._handle(resp);
+    },
+
     // Alerts
     listAlerts: async (userId) => {
         const resp = await fetch(`${API_BASE}/users/${userId}/alerts`, { headers: api._headers() });
@@ -143,6 +157,14 @@ const api = {
         return all.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     },
 
+    markNotificationsRead: async (userId) => {
+        const resp = await fetch(`${API_BASE}/users/${userId}/notifications/read`, {
+            method: 'POST',
+            headers: api._headers()
+        });
+        return api._handle(resp);
+    },
+
     // News & Search (RF17)
     searchNews: async (params) => {
         const qs = new URLSearchParams();
@@ -189,6 +211,81 @@ function logout() {
     localStorage.removeItem('access_token');
     localStorage.removeItem('user');
     window.location.href = '/static/index.html';
+}
+
+function showToast(message, type = 'success', timeout = 4200) {
+    let container = document.querySelector('.app-toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'app-toast-container';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `app-toast ${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-8px)';
+        toast.style.transition = 'all 0.18s ease-out';
+        setTimeout(() => toast.remove(), 200);
+    }, timeout);
+}
+
+function showPopup(title, body, actions = []) {
+    document.querySelectorAll('.app-popup-backdrop').forEach(el => el.remove());
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'app-popup-backdrop';
+    const actionButtons = actions.length ? actions : [{ label: 'Aceptar', className: 'btn-dark' }];
+    backdrop.innerHTML = `
+        <div class="app-popup" role="dialog" aria-modal="true">
+            <div class="app-popup-header">
+                <h5 class="mb-0">${title}</h5>
+                <button type="button" class="btn-close" aria-label="Cerrar"></button>
+            </div>
+            <div class="app-popup-body">${body}</div>
+            <div class="app-popup-actions">
+                ${actionButtons.map((action, index) => `<button type="button" class="btn ${action.className || 'btn-dark'}" data-action-index="${index}">${action.label}</button>`).join('')}
+            </div>
+        </div>
+    `;
+    document.body.appendChild(backdrop);
+
+    const close = () => backdrop.remove();
+    backdrop.querySelector('.btn-close').addEventListener('click', close);
+    backdrop.addEventListener('click', event => {
+        if (event.target === backdrop) close();
+    });
+    backdrop.querySelectorAll('[data-action-index]').forEach(button => {
+        button.addEventListener('click', () => {
+            const action = actionButtons[Number(button.dataset.actionIndex)];
+            close();
+            if (action && typeof action.onClick === 'function') action.onClick();
+        });
+    });
+}
+
+function setPageStatus(targetId, message, type = 'info') {
+    let status = document.getElementById(targetId);
+    if (!status) return;
+    status.className = `app-status ${type}`;
+    status.innerHTML = message;
+    status.style.display = message ? 'flex' : 'none';
+}
+
+function setButtonLoading(button, loadingText) {
+    if (!button) return () => {};
+    const previousHtml = button.innerHTML;
+    const previousDisabled = button.disabled;
+    button.disabled = true;
+    button.innerHTML = `<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>${loadingText}`;
+    return () => {
+        button.disabled = previousDisabled;
+        button.innerHTML = previousHtml;
+    };
 }
 
 function requireAuth() {

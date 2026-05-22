@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime
 from typing import Dict, List
+from zoneinfo import ZoneInfo
 
 import feedparser
 from sqlalchemy.orm import Session
@@ -57,7 +58,7 @@ def match_keywords(text: str, keywords: List[str]) -> List[str]:
     return matched
 
 
-async def process_rss_channels(db: Session) -> Dict:
+async def process_rss_channels(db: Session, user_id: int | None = None) -> Dict:
     """Process all active RSS channels and match against alerts"""
     stats = {
         "total_feeds_processed": 0,
@@ -70,8 +71,29 @@ async def process_rss_channels(db: Session) -> Dict:
     # Track matches per alert: {alert_id: {'alert': alert, 'matches': [news_item, ...]}}
     alert_matches = {}
 
-    # Get all active RSS channels
-    channels = db.query(models.RSSChannel).filter(models.RSSChannel.is_active).all()
+    # User-triggered runs only process channels attached to that user's active
+    # alerts, so notifications stay scoped to the account that started the run.
+    channels_query = db.query(models.RSSChannel).filter(models.RSSChannel.is_active)
+    if user_id is not None:
+        user_alerts = (
+            db.query(models.Alert)
+            .filter(models.Alert.is_active, models.Alert.user_id == user_id)
+            .all()
+        )
+        channel_ids = sorted(
+            {
+                channel.id
+                for alert in user_alerts
+                for channel in list(alert.rss_channels or [])
+            }
+        )
+        if not channel_ids:
+            stats["alert_summaries"] = []
+            stats["processing_time_seconds"] = 0
+            return stats
+        channels_query = channels_query.filter(models.RSSChannel.id.in_(channel_ids))
+
+    channels = channels_query.all()
 
     for channel in channels:
         try:
@@ -95,8 +117,17 @@ async def process_rss_channels(db: Session) -> Dict:
                 )
 
                 if existing:
-                    # Re-match unmatched existing items against alerts
-                    if existing.alert_id is None:
+                    if existing.rss_channel_id is None:
+                        existing.rss_channel_id = channel.id
+                    if existing.category_id is None:
+                        existing.category_id = channel.category_id
+                    # Re-match existing items too, so repeated processing can still
+                    # notify the current user's alert when the feed exposes known URLs.
+                    if user_id is not None:
+                        match_news_against_alerts(
+                            db, existing, item_data, alert_matches, stats, user_id=user_id
+                        )
+                    elif existing.alert_id is None:
                         match_news_against_alerts(
                             db, existing, item_data, alert_matches, stats
                         )
@@ -116,7 +147,7 @@ async def process_rss_channels(db: Session) -> Dict:
 
                 # Match against alerts
                 match_news_against_alerts(
-                    db, news_item, item_data, alert_matches, stats
+                    db, news_item, item_data, alert_matches, stats, user_id=user_id
                 )
 
             # Update last fetched time
@@ -146,6 +177,30 @@ async def process_rss_channels(db: Session) -> Dict:
     db.add(processing_stats)
     db.commit()
 
+    stats["alert_summaries"] = [
+        {
+            "alert_id": data["alert"].id,
+            "alert_name": data["alert"].name,
+            "matches_count": len(data["matches"]),
+            "sources": list(
+                {
+                    n.rss_channel.information_source.name
+                    for n in data["matches"]
+                    if n.rss_channel and n.rss_channel.information_source
+                }
+            ),
+            "matched_keywords": list(
+                {
+                    kw
+                    for n in data["matches"]
+                    if n.matched_keywords
+                    for kw in n.matched_keywords
+                }
+            ),
+        }
+        for data in alert_matches.values()
+    ]
+
     # Send one summary notification per alert that had matches
     for _, data in alert_matches.items():
         await send_cycle_notification(db, data["alert"], data["matches"], stats)
@@ -159,10 +214,14 @@ def match_news_against_alerts(
     item_data: Dict,
     alert_matches: Dict,
     stats: Dict,
+    user_id: int | None = None,
 ):
     """Match news item against active alerts and accumulate matches"""
     # Get all active alerts
-    alerts = db.query(models.Alert).filter(models.Alert.is_active).all()
+    alerts_query = db.query(models.Alert).filter(models.Alert.is_active)
+    if user_id is not None:
+        alerts_query = alerts_query.filter(models.Alert.user_id == user_id)
+    alerts = alerts_query.all()
 
     for alert in alerts:
         # Check if alert has specific RSS channels configured
@@ -214,8 +273,8 @@ async def send_cycle_notification(
     db: Session, alert: models.Alert, matched_news: List[models.NewsItem], stats: Dict
 ):
     """Create one summary notification per alert after the full processing cycle"""
-    now = datetime.utcnow()
-    timestamp_display = now.strftime("%d/%m/%Y %H:%M")
+    now = datetime.now(ZoneInfo("Europe/Madrid"))
+    timestamp_display = now.strftime("%d/%m/%Y %H:%M:%S")
 
     # Collect unique sources from matched news
     sources = list(

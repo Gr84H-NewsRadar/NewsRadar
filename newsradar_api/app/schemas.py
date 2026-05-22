@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, EmailStr, Field, HttpUrl
+from pydantic import BaseModel, EmailStr, Field, HttpUrl, field_validator
 
 # ==================== TOKEN ====================
 
@@ -77,6 +77,7 @@ class UserUpdate(BaseModel):
 class User(UserBase):
     id: int
     role_ids: List[int] = Field(default_factory=list)
+    roles: List[Role] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
@@ -259,11 +260,14 @@ class NotificationCreate(NotificationBase):
 class NotificationUpdate(BaseModel):
     timestamp: Optional[datetime] = None
     metrics: Optional[List[Metric]] = None
+    is_read: Optional[bool] = None
 
 
 class Notification(NotificationBase):
     id: int
     alert_id: int
+    is_read: bool = False
+    sent_email: bool = False
 
     class Config:
         from_attributes = True
@@ -284,6 +288,8 @@ class Notification(NotificationBase):
             alert_id=notif_orm.alert_id,
             timestamp=notif_orm.created_at,
             metrics=metrics,
+            is_read=bool(getattr(notif_orm, "is_read", False)),
+            sent_email=bool(getattr(notif_orm, "sent_email", False)),
         )
 
 
@@ -364,6 +370,17 @@ class NewsItem(NewsItemBase):
 
     class Config:
         from_attributes = True
+
+    @field_validator("matched_keywords", mode="before")
+    @classmethod
+    def normalize_matched_keywords(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, list):
+            return [str(item) for item in value]
+        if isinstance(value, str):
+            return [value]
+        return [str(value)]
 
 
 class ProcessingStats(BaseModel):

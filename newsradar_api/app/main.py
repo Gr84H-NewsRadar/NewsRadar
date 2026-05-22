@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import re
@@ -50,6 +51,7 @@ app.add_middleware(
 )
 
 API_PREFIX = "/api/v1"
+rss_scheduler_lock = asyncio.Lock()
 
 IPTC_CATALOG = {
     "01000000": "Artes, cultura, entretenimiento y medios",
@@ -183,12 +185,22 @@ def _validate_rss_url(url: str) -> None:
 def _validate_cron_expression(cron_expression: str) -> str:
     cron = cron_expression.strip()
     parts = cron.split()
-    if len(parts) != 5 or any(part == "" for part in parts):
+    if len(parts) not in (5, 6) or any(part == "" for part in parts):
         raise HTTPException(status_code=422, detail="Invalid cron expression")
     allowed = re.compile(r"^[\d\*/,\-]+$")
     if not all(allowed.match(part) for part in parts):
         raise HTTPException(status_code=422, detail="Invalid cron expression")
     return cron
+
+
+def _is_minutely_cron(cron_expression: str) -> bool:
+    parts = (cron_expression or "").strip().split()
+    minutely_values = {"*", "*/1", "0/1"}
+    if len(parts) == 5:
+        return parts[0] in minutely_values
+    if len(parts) == 6:
+        return parts[0] in {"0", "*", "*/1", "0/1"} and parts[1] in minutely_values
+    return False
 
 
 def _normalize_alert_descriptors(descriptors: Optional[List[str]]) -> List[str]:
@@ -207,15 +219,6 @@ def _normalize_alert_descriptors(descriptors: Optional[List[str]]) -> List[str]:
 
         seen.add(key)
         normalized.append(descriptor)
-
-    for fallback in ("noticias", "actualidad", "seguimiento"):
-        if len(normalized) >= 3:
-            break
-
-        key = fallback.lower()
-        if key not in seen:
-            seen.add(key)
-            normalized.append(fallback)
 
     return normalized[:10]
 
@@ -336,6 +339,29 @@ async def register(
 @app.get(f"{API_PREFIX}/auth/me", response_model=schemas.User, tags=["auth"])
 def get_current_user_info(current_user: models.User = Depends(get_current_user)):
     return current_user
+
+
+@app.get(f"{API_PREFIX}/auth/verify", tags=["auth"])
+def verify_email(token: str = Query(..., min_length=1), db: Session = Depends(get_db)):
+    user = (
+        db.query(models.User)
+        .filter(models.User.verification_token == token)
+        .first()
+    )
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid verification token")
+
+    expires_at = user.verification_token_expires
+    if expires_at and expires_at.replace(tzinfo=None) < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Verification token expired")
+
+    user.is_verified = True
+    user.is_active = True
+    user.verification_token = None
+    user.verification_token_expires = None
+    db.commit()
+
+    return {"status": "verified", "message": "Email verified successfully"}
 
 
 # ==================== USERS ====================
@@ -757,6 +783,37 @@ def list_notifications(
 
 
 @app.post(
+    f"{API_PREFIX}/users/{{user_id}}/notifications/read",
+    tags=["notifications"],
+)
+def mark_user_notifications_read(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _ensure_same_user_or_manager(current_user, user_id)
+    alert_ids = [
+        alert_id
+        for (alert_id,) in db.query(models.Alert.id)
+        .filter(models.Alert.user_id == user_id)
+        .all()
+    ]
+    if not alert_ids:
+        return {"status": "ok", "updated": 0}
+
+    updated = (
+        db.query(models.Notification)
+        .filter(
+            models.Notification.alert_id.in_(alert_ids),
+            models.Notification.is_read.is_(False),
+        )
+        .update({"is_read": True}, synchronize_session=False)
+    )
+    db.commit()
+    return {"status": "ok", "updated": updated}
+
+
+@app.post(
     f"{API_PREFIX}/users/{{user_id}}/alerts/{{alert_id}}/notifications",
     response_model=schemas.Notification,
     status_code=201,
@@ -846,6 +903,8 @@ def update_notification(
         n.statistics = {m.name: m.value for m in notif_data.metrics}
     if notif_data.timestamp is not None:
         n.title = f"Actualizacion en {notif_data.timestamp.strftime('%d/%m/%Y %H:%M')}"
+    if notif_data.is_read is not None:
+        n.is_read = notif_data.is_read
     db.commit()
     db.refresh(n)
     return schemas.Notification.from_orm_notification(n)
@@ -893,6 +952,7 @@ def list_categories(
     return [
         {
             "id": category.id,  # entero: 1000000, 2000000, ...
+            "code": category.code,
             "name": category.name,
             "source": category.source or "IPTC",
         }
@@ -1571,8 +1631,31 @@ def delete_stats(
 # ==================== NEWS (RF17 - busqueda y filtrado) ====================
 
 
+def _serialize_news_item(item: models.NewsItem) -> dict:
+    matched_keywords = item.matched_keywords
+    if matched_keywords is None:
+        matched_keywords = []
+    elif isinstance(matched_keywords, str):
+        matched_keywords = [matched_keywords]
+    elif not isinstance(matched_keywords, list):
+        matched_keywords = [str(matched_keywords)]
+
+    return {
+        "id": item.id,
+        "title": item.title,
+        "link": item.link,
+        "description": item.description,
+        "published_date": item.published_date.isoformat() if item.published_date else None,
+        "rss_channel_id": item.rss_channel_id,
+        "category_id": item.category_id,
+        "alert_id": item.alert_id,
+        "matched_keywords": matched_keywords,
+        "created_at": item.created_at.isoformat() if item.created_at else None,
+    }
+
+
 # RF17 - busqueda y filtrado: parametros q (full-text), date_from/date_to (rango fechas)
-@app.get(f"{API_PREFIX}/news", response_model=List[schemas.NewsItem], tags=["news"])
+@app.get(f"{API_PREFIX}/news", tags=["news"])
 def list_news(
     skip: int = 0,
     limit: int = 100,
@@ -1611,12 +1694,13 @@ def list_news(
             query = query.filter(models.NewsItem.published_date <= d)
         except ValueError:
             pass
-    return (
+    items = (
         query.order_by(models.NewsItem.created_at.desc())
         .offset(skip)
         .limit(limit)
         .all()
     )
+    return [_serialize_news_item(item) for item in items]
 
 
 @app.get(
@@ -1669,6 +1753,7 @@ def get_dashboard_stats(
         )
         if c2 > 0:
             alerts_by_category[cat.name] = c2
+
     return {
         "total_sources": total_sources,
         "total_news": total_news,
@@ -1817,13 +1902,20 @@ def get_wordcloud(
 async def trigger_rss_processing(
     db: Session = Depends(get_db), current_user: models.User = Depends(require_manager)
 ):
-    try:
-        stats = await process_rss_channels(db)
-        return {"status": "completed", "statistics": stats}
-    except Exception as e:
-        logger.error("Error processing RSS feeds: %s", str(e))
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}") from e
+    if rss_scheduler_lock.locked():
+        return {
+            "status": "busy",
+            "message": "RSS processing is already running",
+            "statistics": {},
+        }
 
+    async with rss_scheduler_lock:
+        try:
+            stats = await process_rss_channels(db, user_id=current_user.id)
+            return {"status": "completed", "statistics": stats}
+        except Exception as e:
+            logger.error("Error processing RSS feeds: %s", str(e))
+            raise HTTPException(status_code=500, detail=f"Error: {str(e)}") from e
 
 # ==================== FRONTEND STATIC FILES ====================
 # Esto debe ir AL FINAL para no interferir con los endpoints API

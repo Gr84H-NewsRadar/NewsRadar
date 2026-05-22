@@ -32,6 +32,7 @@
 
             <div class="card shadow-sm mb-4">
                 <div class="card-body">
+                    <div id="search-status" class="app-status" style="display:none"></div>
                     <div class="row g-3">
                         <div class="col-md-5">
                             <label class="form-label small" data-i18n="search_keyword">Palabra clave</label>
@@ -53,7 +54,7 @@
                         </div>
                     </div>
                     <div class="mt-3">
-                        <button class="btn btn-dark" onclick="doSearch()"><i class="bi bi-search"></i> <span data-i18n="search_btn">Buscar</span></button>
+                        <button class="btn btn-dark" id="btn-search-news" onclick="doSearch()"><i class="bi bi-search"></i> <span data-i18n="search_btn">Buscar</span></button>
                         <button class="btn btn-light" onclick="clearFilters()"><span data-i18n="clear">Limpiar</span></button>
                     </div>
                 </div>

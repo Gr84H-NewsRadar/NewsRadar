@@ -16,6 +16,8 @@ async function init() {
 }
 
 async function doSearch() {
+    const btn = document.getElementById('btn-search-news');
+    const stopLoading = setButtonLoading(btn, 'Buscando...');
     const params = {
         q: document.getElementById('filter-q').value.trim(),
         category_id: document.getElementById('filter-category').value,
@@ -25,13 +27,17 @@ async function doSearch() {
 
     const list = document.getElementById('results-list');
     const count = document.getElementById('results-count');
-    list.innerHTML = '<p class="text-muted">Buscando...</p>';
+    count.textContent = 'Buscando noticias...';
+    setPageStatus('search-status', '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>Buscando noticias con los filtros seleccionados...</span>', 'info');
+    list.innerHTML = '<div class="loading-line"></div><div class="loading-line"></div><div class="loading-line"></div>';
 
     try {
         const news = await api.searchNews(params);
         count.textContent = `${news.length} resultado(s)`;
+        setPageStatus('search-status', `<i class="bi bi-check-circle"></i><span>Búsqueda completada: ${news.length} resultado(s).</span>`, 'success');
         if (news.length === 0) {
-            list.innerHTML = '<p class="text-muted text-center py-4">No se encontraron noticias con esos filtros.</p>';
+            setPageStatus('search-status', '<i class="bi bi-info-circle"></i><span>No se encontraron noticias con esos filtros.</span>', 'info');
+            list.innerHTML = '<p class="text-muted text-center py-4">No hay noticias que coincidan con la búsqueda.</p>';
             return;
         }
         list.innerHTML = news.map(n => {
@@ -49,7 +55,11 @@ async function doSearch() {
             `;
         }).join('');
     } catch (err) {
-        list.innerHTML = `<p class="text-danger">Error: ${err.message}</p>`;
+        setPageStatus('search-status', '<i class="bi bi-info-circle"></i><span>No se encontraron noticias con esos filtros.</span>', 'info');
+        count.textContent = '0 resultado(s)';
+        list.innerHTML = '<p class="text-muted text-center py-4">No hay noticias que coincidan con la búsqueda.</p>';
+    } finally {
+        stopLoading();
     }
 }
 
@@ -59,6 +69,7 @@ function clearFilters() {
     document.getElementById('filter-from').value = '';
     document.getElementById('filter-to').value = '';
     document.getElementById('results-list').innerHTML = '';
+    setPageStatus('search-status', '', 'info');
     document.getElementById('results-count').textContent = '—';
 }
 

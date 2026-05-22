@@ -45,6 +45,7 @@
                                 <th data-i18n="alert_name">NOMBRE DE LA ALERTA</th>
                                 <th data-i18n="descriptors">DESCRIPTORES</th>
                                 <th data-i18n="categories">CATEGORÍAS</th>
+                                <th>CANALES RSS</th>
                                 <th data-i18n="cron">PERIODICIDAD</th>
                                 <th data-i18n="actions">ACCIONES</th>
                             </tr>
@@ -88,6 +89,10 @@
                             <select class="form-select" id="alert-category">
                                 <option value="">— ninguna —</option>
                             </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">CANALES RSS</label>
+                            <select class="form-select" id="alert-rss-channels" multiple size="5"></select>
                         </div>
                         <div class="mb-3">
                             <div class="form-check"><input class="form-check-input" type="checkbox" id="notify-email" checked><label class="form-check-label" data-i18n="notify_email">Notificar por correo</label></div>
