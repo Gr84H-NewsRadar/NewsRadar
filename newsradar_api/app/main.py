@@ -230,6 +230,48 @@ def _normalize_alert_descriptors(descriptors: Optional[List[str]]) -> List[str]:
     return normalized[:10]
 
 
+def _build_alert_descriptors(
+    name: str, descriptors: Optional[List[str]]
+) -> List[str]:
+    normalized = _normalize_alert_descriptors(descriptors)
+    seeds: List[str] = list(normalized)
+    seen_keys = {descriptor.lower().strip() for descriptor in normalized}
+
+    for token in re.findall(r"[\w\u00C0-\u017F]+", name or ""):
+        cleaned = token.strip()
+        if not cleaned:
+            continue
+        key = cleaned.lower()
+        if key not in seen_keys:
+            seen_keys.add(key)
+            seeds.append(cleaned)
+
+    expanded: List[str] = []
+    expanded_keys: set[str] = set()
+
+    for seed in seeds:
+        for candidate in [seed, *get_synonyms(seed, settings.MIN_SYNONYMS, settings.MAX_SYNONYMS)]:
+            descriptor = _normalize_required_text(str(candidate), "descriptor")
+            key = descriptor.lower().strip()
+            if key in expanded_keys:
+                continue
+            expanded_keys.add(key)
+            expanded.append(descriptor)
+            if len(expanded) >= settings.MAX_SYNONYMS:
+                return expanded[: settings.MAX_SYNONYMS]
+
+    fallback_descriptors = ["news", "alerta", "noticia", "seguimiento", "actualizacion"]
+    for fallback in fallback_descriptors:
+        if len(expanded) >= settings.MIN_SYNONYMS:
+            break
+        key = fallback.lower()
+        if key not in expanded_keys:
+            expanded_keys.add(key)
+            expanded.append(fallback)
+
+    return expanded[: settings.MAX_SYNONYMS]
+
+
 def _validate_alert_categories(
     categories: Optional[List[schemas.AlertCategoryItem]],
 ) -> Optional[str]:
@@ -640,7 +682,7 @@ def create_alert(
             detail=f"Maximum {settings.MAX_ALERTS_PER_USER} alerts per user",
         )
     category_code = _validate_alert_categories(alert_data.categories)
-    descriptors = _normalize_alert_descriptors(alert_data.descriptors)
+    descriptors = _build_alert_descriptors(alert_data.name, alert_data.descriptors)
     cron_expression = _validate_cron_expression(alert_data.cron_expression)
     alert = models.Alert(
         user_id=user_id,
@@ -708,7 +750,7 @@ def update_alert(
         raise HTTPException(status_code=404, detail="Alert not found")
     update_data = alert_data.model_dump(exclude_unset=True)
     if "descriptors" in update_data:
-        alert.keywords = _normalize_alert_descriptors(update_data.pop("descriptors"))
+        alert.keywords = _build_alert_descriptors(alert.name, update_data.pop("descriptors"))
     if "categories" in update_data:
         cats = update_data.pop("categories")
         alert.category_code = _validate_alert_categories(cats)
