@@ -3,7 +3,7 @@ from typing import List
 
 logger = logging.getLogger(__name__)
 
-# Simple synonym dictionary for common Spanish news terms
+# Diccionario de sinónimos para términos comunes en español
 SYNONYM_DICT = {
     "economía": ["finanzas", "mercado", "comercio", "negocios", "bolsa"],
     "política": ["gobierno", "elecciones", "parlamento", "congreso", "senado"],
@@ -31,7 +31,7 @@ SYNONYM_DICT = {
 
 
 def get_synonyms(keyword: str, min_count: int = 3, max_count: int = 10) -> List[str]:
-    """Get synonym recommendations for a keyword"""
+    """Obtiene recomendaciones de sinónimos para una palabra clave (entre 3 y 10)"""
     keyword_lower = keyword.lower().strip()
 
     # Check if keyword exists in dictionary

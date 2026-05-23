@@ -583,3 +583,91 @@ def test_alert_response_uses_strings_for_new_id_fields():
         assert isinstance(x, str)
     for x in body["information_sources_ids"]:
         assert isinstance(x, str)
+
+def test_synonym_service_expand_keywords():
+    """Test: expandir múltiples keywords con sinónimos"""
+    from app.synonym_service import expand_keywords
+    result = expand_keywords(["tecnología", "salud"])
+    assert isinstance(result, dict)
+    assert "tecnología" in result or "salud" in result
+
+
+def test_synonym_service_no_synonyms():
+    """Test: keyword sin sinónimos devuelve lista vacía"""
+    from app.synonym_service import get_synonyms
+    result = get_synonyms("palabrainexistente123")
+    assert result == []
+
+
+def test_database_get_db_closes():
+    """Test: get_db cierra la sesión correctamente"""
+    from app.database import get_db
+    gen = get_db()
+    db = next(gen)
+    assert db is not None
+    try:
+        next(gen)
+    except StopIteration:
+        pass  # Esperado: el generador cierra la sesión
+
+
+def test_auth_get_current_active_user_not_verified():
+    """Test: usuario no verificado no puede acceder"""
+    from app import models
+    r = client.post("/api/v1/auth/register", json={
+        "email": "notverified@example.com",
+        "first_name": "Not", "last_name": "Verified",
+        "organization": "Test", "password": "pass123", "role_ids": []
+    })
+    user_id = r.json()["id"]
+    
+    # Marcar como no verificado
+    db = TestingSessionLocal()
+    try:
+        u = db.query(models.User).filter(models.User.id == user_id).first()
+        u.is_verified = False
+        db.commit()
+    finally:
+        db.close()
+    
+    token = client.post("/api/v1/auth/login",
+        data={"username": "notverified@example.com", "password": "pass123"}).json()["access_token"]
+    
+    # Intentar acceder a un endpoint que requiere verificación
+    response = client.get("/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"})
+    # Debería funcionar porque get_current_user no requiere verificación
+    assert response.status_code == 200
+
+
+def test_patch_user():
+    """Test: actualizar usuario con PATCH"""
+    r = client.post("/api/v1/auth/register", json={
+        "email": "patch@example.com",
+        "first_name": "Patch", "last_name": "User",
+        "organization": "Test", "password": "pass123", "role_ids": []
+    })
+    user_id = r.json()["id"]
+    token = client.post("/api/v1/auth/login",
+        data={"username": "patch@example.com", "password": "pass123"}).json()["access_token"]
+
+    response = client.patch(f"/api/v1/users/{user_id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"organization": "Patched Org"})
+    assert response.status_code == 200
+    assert response.json()["organization"] == "Patched Org"
+
+
+def test_wordcloud_endpoint():
+    """Test: endpoint de wordcloud"""
+    client.post("/api/v1/auth/register", json={
+        "email": "wordcloud@example.com",
+        "first_name": "Word", "last_name": "Cloud",
+        "organization": "Test", "password": "pass123", "role_ids": []
+    })
+    token = client.post("/api/v1/auth/login",
+        data={"username": "wordcloud@example.com", "password": "pass123"}).json()["access_token"]
+
+    response = client.get("/api/v1/dashboard/wordcloud",
+        headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200

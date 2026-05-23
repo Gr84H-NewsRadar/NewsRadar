@@ -1,4 +1,5 @@
 services:
+  # Base de datos PostgreSQL
   db:
     image: postgres:15-alpine
     environment:
@@ -15,6 +16,7 @@ services:
       timeout: 5s
       retries: 5
 
+  # API FastAPI con la lógica de negocio
   api:
     build:
       context: ./newsradar_api
@@ -40,6 +42,7 @@ services:
       timeout: 10s
       retries: 3
 
+  # Servidor SMTP para desarrollo
   mailhog:
     image: mailhog/mailhog:latest
     ports:

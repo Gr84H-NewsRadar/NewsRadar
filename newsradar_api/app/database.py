@@ -3,6 +3,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 from app.config import settings
 
+# Motor de BD con soporte para SQLite y PostgreSQL
 engine = create_engine(
     settings.DATABASE_URL,
     connect_args=(
@@ -16,6 +17,7 @@ Base = declarative_base()
 
 
 def get_db():
+    """Generador de sesiones de BD para inyección de dependencias en FastAPI"""
     db = SessionLocal()
     try:
         yield db

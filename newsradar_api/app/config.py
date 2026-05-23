@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    """Application configuration settings."""
+    """Configuración de la aplicación cargada desde variables de entorno o .env"""
 
     # Database
     DATABASE_URL: str = "sqlite:///./newsradar.db"

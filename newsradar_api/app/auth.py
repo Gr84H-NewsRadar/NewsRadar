@@ -11,6 +11,7 @@ from app import models
 from app.config import settings
 from app.database import get_db
 
+# Contexto para hashear contraseñas con bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -24,6 +25,7 @@ def get_password_hash(password: str) -> str:
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    """Crea un token JWT con tiempo de expiración configurable"""
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
@@ -54,6 +56,7 @@ def decode_access_token(token: str) -> Optional[str]:
 def get_current_user(
     token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
 ) -> models.User:
+    """Obtiene el usuario actual desde el token JWT. Lanza excepción si no es válido"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -83,7 +86,7 @@ def get_current_active_user(
 
 
 def is_manager(user: models.User) -> bool:
-    """Check if user has manager role"""
+    """Comprueba si el usuario tiene rol de gestor/manager/admin"""
     return any(
         role.name.lower() in ["manager", "admin", "gestor"] for role in user.roles
     )
@@ -92,7 +95,7 @@ def is_manager(user: models.User) -> bool:
 def require_manager(
     current_user: models.User = Depends(get_current_active_user),
 ) -> models.User:
-    """Dependency to require manager role"""
+    """Dependencia que requiere rol de gestor. Lanza 403 si no lo tiene"""
     if not is_manager(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Manager role required"

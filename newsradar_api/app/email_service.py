@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 async def send_email(to_email: str, subject: str, body: str, html_body: str = None):
-    """Send email using SMTP"""
+    """Envía un email usando SMTP"""
     try:
         message = MIMEMultipart("alternative")
         message["From"] = settings.SMTP_FROM
@@ -45,7 +45,7 @@ async def send_email(to_email: str, subject: str, body: str, html_body: str = No
 
 
 async def send_verification_email(to_email: str, verification_token: str):
-    """Send email verification link"""
+    """Envía email de verificación con token válido 24h"""
     verification_link = (
         f"http://localhost:8000/api/v1/auth/verify?token={verification_token}"
     )
@@ -85,7 +85,7 @@ async def send_cycle_summary(
     matched_news: list,
     statistics: dict,
 ):
-    """Send a single summary email per alert after each processing cycle"""
+    """Envía email resumen con todas las noticias que coincidieron con la alerta"""
     subject = f"Actualización de {alert_name} en {timestamp_display}"
 
     news_processed = statistics.get("news_processed", 0)

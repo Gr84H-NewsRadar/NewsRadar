@@ -1,3 +1,6 @@
+# Configuración de cobertura de código
+# Excluye archivos con lógica externa (RSS, email) o inicialización
+
 [run]
 omit =
     app/rss_processor.py

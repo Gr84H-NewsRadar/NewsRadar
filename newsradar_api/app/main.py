@@ -53,6 +53,7 @@ app.add_middleware(
 API_PREFIX = "/api/v1"
 rss_scheduler_lock = asyncio.Lock()
 
+# Catálogo IPTC Media Topics de primer nivel (17 categorías)
 IPTC_CATALOG = {
     "01000000": "Artes, cultura, entretenimiento y medios",
     "02000000": "Policía y justicia",
@@ -76,6 +77,7 @@ IPTC_CATALOG = {
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
+    """Añade headers de seguridad a todas las respuestas"""
     response = await call_next(request)
     response.headers.setdefault("Access-Control-Allow-Origin", "*")
     response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
@@ -91,6 +93,7 @@ def _catalog_code_for_name(name: str) -> Optional[str]:
 
 
 def _normalize_required_text(value: str, field_name: str) -> str:
+    """Valida y normaliza campos de texto obligatorios (sin saltos de línea ni scripts)"""
     normalized = value.strip()
     if not normalized:
         raise HTTPException(status_code=422, detail=f"{field_name} cannot be blank")
@@ -108,6 +111,7 @@ def _normalize_required_text(value: str, field_name: str) -> str:
 def _validate_user_roles(
     db: Session, role_ids: Optional[List[int]]
 ) -> List[models.Role]:
+    """Valida y asigna roles al usuario. Por defecto asigna 'gestor' si no se especifica"""
     if not role_ids:
         gestor_role = (
             db.query(models.Role)
@@ -133,6 +137,7 @@ def _validate_user_roles(
 
 
 def _authenticate_user(db: Session, email: str, password: str) -> models.User:
+    """Autentica usuario por email y contraseña. Lanza excepción si falla"""
     user = (
         db.query(models.User)
         .filter(func.lower(models.User.email) == email.strip().lower())
@@ -183,6 +188,7 @@ def _validate_rss_url(url: str) -> None:
 
 
 def _validate_cron_expression(cron_expression: str) -> str:
+    """Valida formato de expresión cron (5 o 6 campos con valores numéricos, *, /, -, ,)"""
     cron = cron_expression.strip()
     parts = cron.split()
     if len(parts) not in (5, 6) or any(part == "" for part in parts):
@@ -204,6 +210,7 @@ def _is_minutely_cron(cron_expression: str) -> bool:
 
 
 def _normalize_alert_descriptors(descriptors: Optional[List[str]]) -> List[str]:
+    """Normaliza y valida descriptores de alerta"""
     normalized: List[str] = []
     seen: set[str] = set()
 
@@ -226,6 +233,7 @@ def _normalize_alert_descriptors(descriptors: Optional[List[str]]) -> List[str]:
 def _validate_alert_categories(
     categories: Optional[List[schemas.AlertCategoryItem]],
 ) -> Optional[str]:
+    """Valida que la categoría de la alerta pertenezca al catálogo IPTC"""
     if not categories:
         return None
     first = categories[0]
@@ -244,6 +252,7 @@ def _validate_alert_categories(
 
 @app.on_event("startup")
 async def startup_event():
+    """Inicializa la base de datos al arrancar la aplicación (crea admin, roles, categorías, fuentes)"""
     db = next(get_db())
     try:
         initialize_database(db)
@@ -267,6 +276,7 @@ def health_check():
 
 @app.post(f"{API_PREFIX}/auth/login", response_model=schemas.Token, tags=["auth"])
 async def login(request: Request, db: Session = Depends(get_db)):
+    """Login con email/password. Acepta JSON o form-data. Devuelve JWT token"""
     content_type = request.headers.get("content-type", "").lower()
     email = ""
     password = ""
@@ -308,6 +318,7 @@ async def register(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
+    """Registro de nuevo usuario. Envía email de verificación con token válido 24h"""
     email = str(user_data.email).strip().lower()
     existing = (
         db.query(models.User).filter(func.lower(models.User.email) == email).first()
@@ -343,11 +354,7 @@ def get_current_user_info(current_user: models.User = Depends(get_current_user))
 
 @app.get(f"{API_PREFIX}/auth/verify", tags=["auth"])
 def verify_email(token: str = Query(..., min_length=1), db: Session = Depends(get_db)):
-    user = (
-        db.query(models.User)
-        .filter(models.User.verification_token == token)
-        .first()
-    )
+    user = db.query(models.User).filter(models.User.verification_token == token).first()
     if not user:
         raise HTTPException(status_code=400, detail="Invalid verification token")
 
@@ -614,6 +621,7 @@ def create_alert(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_manager),
 ):
+    """Crea una alerta para monitorizar palabras clave en canales RSS. Máximo 20 por usuario"""
     _ensure_same_user_or_manager(current_user, user_id)
     if not db.query(models.User).filter(models.User.id == user_id).first():
         raise HTTPException(status_code=404, detail="User not found")
@@ -1645,7 +1653,9 @@ def _serialize_news_item(item: models.NewsItem) -> dict:
         "title": item.title,
         "link": item.link,
         "description": item.description,
-        "published_date": item.published_date.isoformat() if item.published_date else None,
+        "published_date": (
+            item.published_date.isoformat() if item.published_date else None
+        ),
         "rss_channel_id": item.rss_channel_id,
         "category_id": item.category_id,
         "alert_id": item.alert_id,
@@ -1916,6 +1926,7 @@ async def trigger_rss_processing(
         except Exception as e:
             logger.error("Error processing RSS feeds: %s", str(e))
             raise HTTPException(status_code=500, detail=f"Error: {str(e)}") from e
+
 
 # ==================== FRONTEND STATIC FILES ====================
 # Esto debe ir AL FINAL para no interferir con los endpoints API

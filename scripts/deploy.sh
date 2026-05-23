@@ -1,10 +1,13 @@
 #!/bin/bash
+# Script de despliegue completo de NewsRadar
+# Construye las imágenes, levanta los contenedores y verifica que la API este operativa
 set -e
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
 
+# Detectar si esta disponible docker compose o docker-compose
 if docker compose version &>/dev/null 2>&1; then
     DC="docker compose"
 elif command -v docker-compose &>/dev/null 2>&1; then
@@ -16,6 +19,7 @@ fi
 
 echo -e "${GREEN}Usando: $DC${NC}"
 
+# Verificar que Docker este corriendo
 if ! docker info &>/dev/null 2>&1; then
     echo -e "${RED}ERROR: No se puede conectar al daemon de Docker.${NC}"
     echo "Ejecuta: sudo usermod -aG docker \$USER && newgrp docker"
@@ -29,6 +33,7 @@ $DC down
 echo "Building and starting containers..."
 $DC up -d --build
 
+# Healthcheck: esperar hasta 60s a que la API responda
 echo "Waiting for API to be healthy..."
 MAX_WAIT=60
 WAITED=0

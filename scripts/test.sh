@@ -1,4 +1,6 @@
 #!/bin/bash
+# Ejecuta los tests dentro del contenedor de la API
+# Incluye cobertura de código y reporte detallado
 set -e
 
 if docker compose version &>/dev/null 2>&1; then

@@ -7,15 +7,18 @@ from pydantic import BaseModel, EmailStr, Field, HttpUrl, field_validator
 
 
 class Token(BaseModel):
+    """Token JWT de autenticación"""
     access_token: str
     token_type: str = "bearer"
 
 
 class TokenData(BaseModel):
+    """Datos extraídos del token JWT"""
     email: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
+    """Petición de login con email y contraseña"""
     email: EmailStr
     password: str
 
@@ -24,6 +27,7 @@ class LoginRequest(BaseModel):
 
 
 class Metric(BaseModel):
+    """Métrica con nombre y valor numérico"""
     name: str = Field(..., min_length=1, max_length=80)
     value: float
 
@@ -32,6 +36,7 @@ class Metric(BaseModel):
 
 
 class RoleBase(BaseModel):
+    """Rol base (admin, gestor, lector)"""
     name: str = Field(..., min_length=1, max_length=80)
 
 
@@ -54,6 +59,7 @@ class Role(RoleBase):
 
 
 class UserBase(BaseModel):
+    """Usuario base con datos personales"""
     email: EmailStr
     first_name: str = Field(..., min_length=1, max_length=120)
     last_name: str = Field(..., min_length=1, max_length=120)
@@ -61,6 +67,7 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
+    """Creación de usuario con contraseña y roles"""
     password: str = Field(..., min_length=6, max_length=128)
     role_ids: List[int] = Field(default_factory=list)
 
@@ -87,6 +94,7 @@ class User(UserBase):
 
 
 class CategoryBase(BaseModel):
+    """Categoría IPTC Media Topics"""
     name: str = Field(..., min_length=1, max_length=120)
     source: str = Field(default="IPTC", pattern=r"^(IPTC|iptc|medtop:\d{8})$")
 
@@ -111,6 +119,7 @@ class Category(CategoryBase):
 
 
 class InformationSourceBase(BaseModel):
+    """Medio de comunicación o fuente oficial"""
     name: str = Field(..., min_length=1, max_length=120)
     url: HttpUrl
 
@@ -135,6 +144,7 @@ class InformationSource(InformationSourceBase):
 
 
 class RSSChannelBase(BaseModel):
+    """Canal RSS de un medio asociado a una categoría"""
     url: HttpUrl
     category_id: int
 
@@ -158,28 +168,29 @@ class RSSChannel(RSSChannelBase):
 
 
 # ==================== ALERTS ====================
-# IMPORTANTE: el profe usa 'descriptors' (= keywords) y 'categories' (lista de objetos)
 
 
 class AlertCategoryItem(BaseModel):
+    """Item de categoría IPTC para alertas"""
     code: str = Field(..., min_length=1, max_length=60)
     label: str = Field(..., min_length=1, max_length=120)
 
 
 class AlertBase(BaseModel):
+    """Alerta de monitorización con palabras clave y categoría"""
     name: str = Field(..., min_length=1, max_length=200)
     descriptors: List[str] = Field(default_factory=list)  # = keywords internamente
     categories: List[AlertCategoryItem] = Field(
         default_factory=list
     )  # = category_code internamente
-    # Parche enunciado profe (aviso 28/04/2026): permitir asociar RSS y fuentes a la alerta
+    # Permitir asociar RSS y fuentes a la alerta
     rss_channels_ids: List[str] = Field(default_factory=list)
     information_sources_ids: List[str] = Field(default_factory=list)
     cron_expression: str = Field(..., min_length=1, max_length=120)
 
 
 class AlertCreate(AlertBase):
-    # Campos extra que usamos internamente pero el profe no define
+    # Campos extra que usamos internamente
     rss_channel_ids: List[int] = Field(default_factory=list)
     notify_email: bool = True
     notify_inbox: bool = True
@@ -189,7 +200,7 @@ class AlertUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     descriptors: Optional[List[str]] = None
     categories: Optional[List[AlertCategoryItem]] = None
-    # Parche enunciado profe (aviso 28/04/2026): permitir asociar RSS y fuentes a la alerta
+    # Permitir asociar RSS y fuentes a la alerta
     rss_channels_ids: List[str] = Field(default_factory=list)
     information_sources_ids: List[str] = Field(default_factory=list)
     cron_expression: Optional[str] = Field(None, min_length=1, max_length=120)
@@ -209,7 +220,7 @@ class Alert(AlertBase):
     # Mapeamos desde el modelo de BD (keywords -> descriptors, category_code -> categories)
     @classmethod
     def from_orm_alert(cls, alert_orm):
-        """Convierte un Alert de BD al schema del profe"""
+        """Convierte un Alert de BD al schema del enunciado"""
         cats = []
         if alert_orm.category_code:
             cats = [
@@ -217,7 +228,7 @@ class Alert(AlertBase):
                     code=alert_orm.category_code, label=alert_orm.category_code
                 )
             ]
-        # Parche profe: poblamos rss_channels_ids e information_sources_ids
+        # Poblamos rss_channels_ids e information_sources_ids
         # a partir de los canales RSS asociados (lista N-N en BD).
         rss_ids: List[str] = []
         info_src_ids: List[str] = []
@@ -245,10 +256,10 @@ class Alert(AlertBase):
 
 
 # ==================== NOTIFICATIONS ====================
-# IMPORTANTE: el profe usa 'timestamp' y 'metrics: List[Metric]'
 
 
 class NotificationBase(BaseModel):
+    """Notificación generada por una alerta con métricas"""
     timestamp: datetime
     metrics: List[Metric] = Field(default_factory=list)
 
@@ -274,7 +285,7 @@ class Notification(NotificationBase):
 
     @classmethod
     def from_orm_notification(cls, notif_orm):
-        """Convierte una Notification de BD al schema del profe"""
+        """Convierte una Notification de BD al schema del enunciado"""
         # Intentamos leer metrics del campo statistics si existe
         metrics = []
         if notif_orm.statistics and isinstance(notif_orm.statistics, dict):
@@ -294,10 +305,10 @@ class Notification(NotificationBase):
 
 
 # ==================== STATS ====================
-# IMPORTANTE: el profe usa 'metrics: List[Metric]'
 
 
 class StatsBase(BaseModel):
+    """Estadísticas de procesamiento con métricas"""
     metrics: List[Metric] = Field(default_factory=list)
 
 
@@ -317,7 +328,7 @@ class Stats(StatsBase):
 
     @classmethod
     def from_orm_stats(cls, stats_orm):
-        """Convierte ProcessingStats de BD al schema del profe"""
+        """Convierte ProcessingStats de BD al schema del enunciado"""
         if getattr(stats_orm, "metrics", None):
             return cls(
                 id=stats_orm.id,
@@ -350,10 +361,11 @@ class Stats(StatsBase):
         return cls(id=stats_orm.id, metrics=metrics)
 
 
-# ==================== SCHEMAS INTERNOS (no expuestos al profe) ====================
+# ==================== SCHEMAS INTERNOS (no expuestos en el enunciado) ====================
 
 
 class NewsItemBase(BaseModel):
+    """Noticia capturada de un canal RSS"""
     title: str
     link: str
     description: Optional[str] = None
@@ -361,6 +373,7 @@ class NewsItemBase(BaseModel):
 
 
 class NewsItem(NewsItemBase):
+    """Noticia completa con relaciones a canal, categoría y alerta"""
     id: int
     rss_channel_id: int
     category_id: Optional[int] = None
@@ -397,6 +410,7 @@ class ProcessingStats(BaseModel):
 
 
 class DashboardStats(BaseModel):
+    """Estadísticas globales del dashboard"""
     total_sources: int
     total_news: int
     total_alerts: int
@@ -405,5 +419,6 @@ class DashboardStats(BaseModel):
 
 
 class SynonymRecommendation(BaseModel):
+    """Recomendación de sinónimos para una palabra clave"""
     keyword: str
     synonyms: List[str]

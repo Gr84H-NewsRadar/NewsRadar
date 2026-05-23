@@ -1,9 +1,9 @@
 #!/bin/bash
+# Construye las imágenes Docker del proyecto
 set -e
 
 echo "Building NewsRadar..."
 
-# Build Docker images
 echo "Building Docker images..."
 docker-compose build
 

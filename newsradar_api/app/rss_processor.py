@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def fetch_rss_feed(url: str, timeout: int = 30) -> Dict:
-    """Fetch and parse RSS feed"""
+    """Obtiene y parsea un feed RSS desde una URL"""
     try:
         feed = feedparser.parse(url)
         return feed
@@ -49,7 +49,7 @@ def extract_news_items(feed: Dict) -> List[Dict]:
 
 
 def match_keywords(text: str, keywords: List[str]) -> List[str]:
-    """Check if any keywords match in text"""
+    """Comprueba qué palabras clave de la alerta aparecen en el texto"""
     text_lower = text.lower()
     matched = []
     for keyword in keywords:
@@ -59,7 +59,10 @@ def match_keywords(text: str, keywords: List[str]) -> List[str]:
 
 
 async def process_rss_channels(db: Session, user_id: int | None = None) -> Dict:
-    """Process all active RSS channels and match against alerts"""
+    """
+    Procesa todos los canales RSS activos y busca coincidencias con alertas.
+    Si se especifica user_id, solo procesa canales de las alertas de ese usuario.
+    """
     stats = {
         "total_feeds_processed": 0,
         "total_feeds_failed": 0,
@@ -125,7 +128,12 @@ async def process_rss_channels(db: Session, user_id: int | None = None) -> Dict:
                     # notify the current user's alert when the feed exposes known URLs.
                     if user_id is not None:
                         match_news_against_alerts(
-                            db, existing, item_data, alert_matches, stats, user_id=user_id
+                            db,
+                            existing,
+                            item_data,
+                            alert_matches,
+                            stats,
+                            user_id=user_id,
                         )
                     elif existing.alert_id is None:
                         match_news_against_alerts(
@@ -216,7 +224,7 @@ def match_news_against_alerts(
     stats: Dict,
     user_id: int | None = None,
 ):
-    """Match news item against active alerts and accumulate matches"""
+    """Compara una noticia contra todas las alertas activas y acumula coincidencias"""
     # Get all active alerts
     alerts_query = db.query(models.Alert).filter(models.Alert.is_active)
     if user_id is not None:
@@ -272,7 +280,7 @@ def match_news_against_alerts(
 async def send_cycle_notification(
     db: Session, alert: models.Alert, matched_news: List[models.NewsItem], stats: Dict
 ):
-    """Create one summary notification per alert after the full processing cycle"""
+    """Crea notificación resumen y envía email al finalizar el ciclo de procesamiento"""
     now = datetime.now(ZoneInfo("Europe/Madrid"))
     timestamp_display = now.strftime("%d/%m/%Y %H:%M:%S")
 

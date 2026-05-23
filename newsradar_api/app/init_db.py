@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def migrate_schema(db: Session):
-    """Apply tiny compatibility migrations for existing Docker volumes."""
+    """Aplica migraciones menores de compatibilidad para volúmenes Docker existentes"""
     bind = db.get_bind()
     dialect = bind.dialect.name
     try:
@@ -31,7 +31,7 @@ def migrate_schema(db: Session):
 
 
 def init_roles(db: Session):
-    """Initialize default roles"""
+    """Crea los roles por defecto: admin, manager, gestor"""
     roles_data = [{"name": "admin"}, {"name": "manager"}, {"name": "gestor"}]
 
     for role_data in roles_data:
@@ -47,7 +47,7 @@ def init_roles(db: Session):
 
 
 def init_categories(db: Session):
-    """Initialize IPTC Media Topics first-level categories"""
+    """Crea las 17 categorías IPTC Media Topics de primer nivel"""
     categories_data = [
         {
             "code": "01000000",
@@ -108,7 +108,7 @@ def init_categories(db: Session):
 
 
 def init_admin_user(db: Session):
-    """Initialize admin user"""
+    """Crea el usuario administrador inicial (admin@newsradar.com / admin123)"""
     admin_email = "admin@newsradar.com"
     existing = db.query(models.User).filter(models.User.email == admin_email).first()
 
@@ -140,10 +140,7 @@ def init_admin_user(db: Session):
 
 
 def init_sample_sources(db: Session):
-    """
-    Initialize RSS sources with 100+ channels from 10+ different media sources,
-    covering all 17 IPTC first-level categories as required by the project specification.
-    """
+    """Crea 100+ canales RSS de 10+ medios diferentes cubriendo las 17 categorías IPTC."""
     sources_data = [
         # ─────────────────────────────────────────
         # 1. RTVE (Radiotelevisión Española)
@@ -747,7 +744,7 @@ def init_sample_sources(db: Session):
 
 
 def initialize_database(db: Session):
-    """Initialize database with seed data"""
+    """Inicializa la BD con datos semilla: roles, categorías IPTC, admin y 100+ canales RSS"""
     logger.info("Initializing database...")
     migrate_schema(db)
     init_roles(db)
