@@ -230,13 +230,15 @@ def _normalize_alert_descriptors(descriptors: Optional[List[str]]) -> List[str]:
     return normalized[:10]
 
 
-def _build_alert_descriptors(
-    name: str, descriptors: Optional[List[str]]
-) -> List[str]:
+def _build_alert_descriptors(name: str, descriptors: Optional[List[str]]) -> List[str]:
+    """Genera descriptores automáticamente desde el nombre de la alerta + sinónimos.
+    Expande entre MIN_SYNONYMS y MAX_SYNONYMS palabras usando el servicio de sinónimos.
+    Si no hay suficientes sinónimos, usa fallbacks genéricos."""
     normalized = _normalize_alert_descriptors(descriptors)
     seeds: List[str] = list(normalized)
     seen_keys = {descriptor.lower().strip() for descriptor in normalized}
 
+    # Extrae palabras del nombre de la alerta como semillas adicionales
     for token in re.findall(r"[\w\u00C0-\u017F]+", name or ""):
         cleaned = token.strip()
         if not cleaned:
@@ -249,8 +251,12 @@ def _build_alert_descriptors(
     expanded: List[str] = []
     expanded_keys: set[str] = set()
 
+    # Expande cada semilla con sus sinónimos hasta alcanzar MAX_SYNONYMS
     for seed in seeds:
-        for candidate in [seed, *get_synonyms(seed, settings.MIN_SYNONYMS, settings.MAX_SYNONYMS)]:
+        for candidate in [
+            seed,
+            *get_synonyms(seed, settings.MIN_SYNONYMS, settings.MAX_SYNONYMS),
+        ]:
             descriptor = _normalize_required_text(str(candidate), "descriptor")
             key = descriptor.lower().strip()
             if key in expanded_keys:
@@ -260,6 +266,7 @@ def _build_alert_descriptors(
             if len(expanded) >= settings.MAX_SYNONYMS:
                 return expanded[: settings.MAX_SYNONYMS]
 
+    # Si no hay suficientes descriptores, añade fallbacks genéricos
     fallback_descriptors = ["news", "alerta", "noticia", "seguimiento", "actualizacion"]
     for fallback in fallback_descriptors:
         if len(expanded) >= settings.MIN_SYNONYMS:
@@ -750,7 +757,9 @@ def update_alert(
         raise HTTPException(status_code=404, detail="Alert not found")
     update_data = alert_data.model_dump(exclude_unset=True)
     if "descriptors" in update_data:
-        alert.keywords = _build_alert_descriptors(alert.name, update_data.pop("descriptors"))
+        alert.keywords = _build_alert_descriptors(
+            alert.name, update_data.pop("descriptors")
+        )
     if "categories" in update_data:
         cats = update_data.pop("categories")
         alert.category_code = _validate_alert_categories(cats)
@@ -1021,6 +1030,7 @@ def create_category(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_manager),
 ):
+    """Crea una categoría IPTC. Valida que el nombre pertenezca al catálogo oficial."""
     name = _normalize_required_text(cat_data.name, "name")
 
     code = _catalog_code_for_name(name)
@@ -1048,6 +1058,7 @@ def create_category(
             detail="Category source does not match category name",
         )
 
+    # Valida formato medtop:XXXXXXXX y que coincida con el código IPTC
     if source_lower.startswith("medtop:"):
         source_code = source_lower.split(":", 1)[1].strip()
 
@@ -1682,6 +1693,7 @@ def delete_stats(
 
 
 def _serialize_news_item(item: models.NewsItem) -> dict:
+    """Serializa un NewsItem a diccionario, normalizando matched_keywords a lista"""
     matched_keywords = item.matched_keywords
     if matched_keywords is None:
         matched_keywords = []
@@ -1721,6 +1733,7 @@ def list_news(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    """Búsqueda y filtrado de noticias por categoría, alerta, texto y rango de fechas"""
     query = db.query(models.NewsItem)
     if category_id:
         query = query.filter(models.NewsItem.category_id == category_id)
@@ -1785,6 +1798,7 @@ def get_keyword_synonyms(
 def get_dashboard_stats(
     db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
 ):
+    """Estadísticas del dashboard: totales y distribución por categorías"""
     total_sources = db.query(models.InformationSource).count()
     total_news = db.query(models.NewsItem).count()
     total_alerts = db.query(models.Alert).count()
@@ -1931,7 +1945,8 @@ def get_wordcloud(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """RF14: nube de palabras de las noticias capturadas (global o por categoria)"""
+    """RF14: nube de palabras de las noticias capturadas (global o por categoria).
+    Filtra stopwords en español e inglés y devuelve las palabras más frecuentes."""
     query = db.query(models.NewsItem)
     if category_id:
         query = query.filter(models.NewsItem.category_id == category_id)
@@ -1954,6 +1969,7 @@ def get_wordcloud(
 async def trigger_rss_processing(
     db: Session = Depends(get_db), current_user: models.User = Depends(require_manager)
 ):
+    """Procesa manualmente todos los canales RSS. Solo un procesamiento a la vez."""
     if rss_scheduler_lock.locked():
         return {
             "status": "busy",
