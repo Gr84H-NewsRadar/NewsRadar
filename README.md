@@ -6,12 +6,12 @@
 
 Sistema de monitorización de noticias en medios de comunicación y fuentes oficiales.
 
-> Proyecto final de la asignatura **Desarrollo y Operación de Sistemas Software** (UC3M, Grado en Ingeniería Informática).
+> Proyecto final de la asignatura **Desarrollo y Operación de Sistemas Software** propuesto por el GRUPO-H.
 
 ## Índice
 
 - [Descripción](#descripción)
-- [Inicio rápido](#inicio-rápido)
+- [Ejecución del proyecto](#ejecución-del-proyecto)
 - [Funcionalidades](#funcionalidades)
 - [Arquitectura](#arquitectura)
 - [API REST](#api-rest)
@@ -23,31 +23,139 @@ Sistema de monitorización de noticias en medios de comunicación y fuentes ofic
 
 NewsRadar permite escuchar canales RSS de medios de comunicación y fuentes oficiales, organizar la información en categorías IPTC, y monitorizar palabras clave mediante alertas configurables. Cuando se detecta una noticia que coincide con una alerta, el sistema notifica al usuario por correo y por buzón interno.
 
-## Requisitos previos
+## Ejecución del proyecto
 
-- Docker Engine ≥ 24.0 con el usuario en el grupo `docker`:
-```bash
-  sudo usermod -aG docker $USER && newgrp docker
-```
-- Puertos libres: 8000, 5432, 1025, 8025
+### Requisitos previos
 
-## Inicio rápido
+Antes de ejecutar el proyecto, asegúrate de tener instalado y abierto:
+
+- Docker Desktop
+- Docker Compose
+- Python 3.10 o superior
+- Git
+
+> Si Docker Desktop no está abierto, puede aparecer un error similar a:
+> ```bash
+> failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
+> ```
+
+---
+
+### 1. Clonar el repositorio
 
 ```bash
 git clone https://github.com/Gr84H-NewsRadar/NewsRadar.git
 cd NewsRadar
-make deploy
 ```
 
-Tras 30-60 segundos, accede a:
+### 2. Añadir la carpeta de verificación
 
-- **Frontend**: http://localhost:8000
-- **API docs**: http://localhost:8000/docs
-- **MailHog**: http://localhost:8025
+Copiar la carpeta `devops_verifica-main` proporcionada en Magistral dentro de la raíz del proyecto.
 
-Credenciales por defecto: `admin@newsradar.com` / `admin123`.
+La estructura final debe ser similar a:
 
-Para más detalle ver [`docs/quickstart.md`](docs/quickstart.md).
+```text
+NewsRadar/
+├── docker-compose.yml
+├── Makefile
+├── newsradar_api/
+├── docs/
+├── scripts/
+└── devops_verifica-main/
+    ├── run_tests.py
+    ├── requirements.txt
+    ├── tests/
+    └── test_data/
+```
+
+### 3. Levantar la aplicación con Docker Compose
+
+Desde la raíz del proyecto:
+
+```bash
+docker compose up --build
+```
+
+También se puede ejecutar en segundo plano con:
+
+```bash
+docker compose up -d --build
+```
+
+Este comando construye y levanta los servicios necesarios:
+
+- API de NewsRadar
+- Base de datos PostgreSQL
+- MailHog para pruebas de correo
+
+### 4. Comprobar que la aplicación está funcionando
+
+Una vez levantados los contenedores, la aplicación estará disponible en:
+
+```text
+http://localhost:8000
+```
+
+La documentación interactiva de la API estará disponible en:
+
+```text
+http://localhost:8000/docs
+```
+
+MailHog estará disponible en:
+
+```text
+http://localhost:8025
+```
+
+También se puede comprobar el estado de la API con:
+
+```bash
+curl http://localhost:8000/api/v1/health
+```
+
+### 5. Credenciales por defecto
+
+Para acceder como administrador:
+
+```text
+Email: admin@newsradar.com
+Contraseña: admin123
+```
+
+### 6. Ejecutar las pruebas de verificación
+
+Con la aplicación ya levantada, abrir otra terminal y entrar en la carpeta de verificación:
+
+```bash
+cd devops_verifica-main
+```
+
+Ejecutar todas las pruebas:
+
+```bash
+python run_tests.py --all
+```
+
+Si se quiere indicar explícitamente la URL del servicio:
+
+```bash
+python run_tests.py --service http://localhost:8000 --all
+```
+
+### 7. Parar la aplicación
+
+Para detener los contenedores:
+
+```bash
+docker compose down
+```
+
+Para detenerlos y eliminar también los volúmenes de datos:
+
+```bash
+docker compose down -v
+```
 
 ## Funcionalidades
 
