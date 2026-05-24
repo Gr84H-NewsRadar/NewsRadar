@@ -25,7 +25,7 @@ from app.auth import (
     verify_password,
 )
 from app.config import settings
-from app.database import Base, engine, get_db
+from app.database import Base, SessionLocal, engine, get_db
 from app.email_service import send_verification_email
 from app.init_db import initialize_database
 from app.rss_processor import process_rss_channels
@@ -299,9 +299,56 @@ def _validate_alert_categories(
     return code
 
 
+RSS_SCHEDULER_INTERVAL_SECONDS = 60
+rss_scheduler_task: Optional[asyncio.Task] = None
+
+
+async def _process_scheduled_rss_once() -> None:
+    """Procesa automáticamente las alertas activas configuradas cada minuto."""
+    if rss_scheduler_lock.locked():
+        logger.info("RSS scheduler skipped: processing already running")
+        return
+
+    async with rss_scheduler_lock:
+        db = SessionLocal()
+        try:
+            minutely_alerts = (
+                db.query(models.Alert).filter(models.Alert.is_active.is_(True)).all()
+            )
+
+            user_ids = sorted(
+                {
+                    alert.user_id
+                    for alert in minutely_alerts
+                    if _is_minutely_cron(alert.cron_expression)
+                }
+            )
+
+            if not user_ids:
+                return
+
+            for user_id in user_ids:
+                logger.info("Scheduled RSS processing for user_id=%s", user_id)
+                await process_rss_channels(db, user_id=user_id)
+
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.error("Scheduled RSS processing failed: %s", exc)
+        finally:
+            db.close()
+
+
+async def _rss_scheduler_loop() -> None:
+    """Ejecuta el procesamiento RSS cada minuto."""
+    while True:
+        await asyncio.sleep(RSS_SCHEDULER_INTERVAL_SECONDS)
+        await _process_scheduled_rss_once()
+
+
 @app.on_event("startup")
 async def startup_event():
-    """Inicializa la base de datos al arrancar la aplicación (crea admin, roles, categorías, fuentes)"""
+    """Inicializa la base de datos y arranca el scheduler RSS."""
+    global rss_scheduler_task  # pylint: disable=global-statement
+
     db = next(get_db())
     try:
         initialize_database(db)
@@ -310,6 +357,21 @@ async def startup_event():
         logger.error("Error initializing database: %s", str(e))
     finally:
         db.close()
+
+    if rss_scheduler_task is None or rss_scheduler_task.done():
+        rss_scheduler_task = asyncio.create_task(_rss_scheduler_loop())
+        logger.info("RSS scheduler started")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Detiene el scheduler RSS al apagar la aplicación."""
+    global rss_scheduler_task  # pylint: disable=global-statement
+
+    if rss_scheduler_task:
+        rss_scheduler_task.cancel()
+        rss_scheduler_task = None
+        logger.info("RSS scheduler stopped")
 
 
 # ==================== HEALTH ====================
