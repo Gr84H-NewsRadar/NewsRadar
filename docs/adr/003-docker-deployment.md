@@ -1,37 +1,127 @@
-# ADR 003: Use Docker for Deployment
+# ADR 003: Despliegue mediante Docker Compose
 
-## Status
-Accepted
+## Estado
 
-## Context
-We need a deployment strategy that:
-- Ensures consistency across environments
-- Simplifies dependency management
-- Enables easy scaling
-- Supports CI/CD automation
-- Works on different platforms
+Aceptado
 
-## Decision
-We will use Docker containers orchestrated with Docker Compose for deployment.
+## Contexto
 
-## Consequences
+NewsRadar necesita un mecanismo de despliegue que permita construir y ejecutar el sistema de forma reproducible en una máquina limpia.
 
-### Positive
-- Consistent environment across development, testing, and production
-- Easy to set up and tear down complete environments
-- Simplified dependency management (no version conflicts)
-- Portable across different hosting platforms
-- Easy to scale horizontally
-- Integrates well with CI/CD pipelines
-- Isolated services reduce conflicts
+El sistema está formado por varios servicios:
 
-### Negative
-- Additional layer of complexity
-- Requires Docker knowledge from team
-- Slightly higher resource usage
-- Need to manage container images and volumes
+- API FastAPI y frontend estático.
+- Base de datos PostgreSQL.
+- Servicio MailHog para capturar correos en desarrollo y verificación.
 
-## Alternatives Considered
-- **Virtual machines**: Too heavy, slower startup times
-- **Bare metal deployment**: Harder to maintain consistency, dependency conflicts
-- **Kubernetes**: Overkill for initial deployment, can migrate later if needed
+El enunciado del proyecto exige que un evaluador pueda clonar el repositorio, construir el sistema, ejecutar las pruebas, desplegar la aplicación y ejecutarla con la mínima intervención manual posible.
+
+Además, el despliegue debe integrarse con los pipelines de CI/CD y ser portable entre entornos de desarrollo.
+
+## Decisión
+
+Se utilizará **Docker** para contenerizar la aplicación y **Docker Compose** para orquestar los servicios necesarios en local.
+
+El despliegue local se realiza desde la raíz del proyecto con:
+
+```bash
+docker compose up -d --build
+```
+
+Este comando construye la imagen de la API y levanta los servicios definidos en `docker-compose.yml`.
+
+Los servicios principales son:
+
+| Servicio | Descripción | Puerto |
+| --- | --- | --- |
+| `api` | Aplicación FastAPI y frontend estático | 8000 |
+| `db` | PostgreSQL 15 | 5432 |
+| `mailhog` | Captura de correos en local | 1025 / 8025 |
+
+## Consecuencias
+
+### Positivas
+
+- Entorno reproducible en distintas máquinas.
+- Menos problemas de dependencias locales.
+- La API, la base de datos y MailHog se levantan de forma coordinada.
+- Facilita la verificación por parte de evaluadores.
+- Permite ejecutar pruebas dentro del mismo entorno que la aplicación.
+- Se integra correctamente con GitHub Actions.
+- Facilita limpiar y recrear el entorno mediante volúmenes Docker.
+
+### Negativas
+
+- Requiere tener Docker Desktop o Docker Engine instalado.
+- En Windows es necesario que Docker Desktop esté iniciado antes de ejecutar `docker compose`.
+- Consume más recursos que ejecutar la aplicación directamente en local.
+- Requiere conocer comandos básicos de Docker Compose.
+- Hay que gestionar volúmenes para preservar o limpiar los datos de PostgreSQL.
+
+## Alternativas consideradas
+
+### Ejecución local sin contenedores
+
+Consistiría en instalar Python, PostgreSQL y dependencias directamente en la máquina del usuario. Se descartó porque aumenta el riesgo de diferencias entre entornos, problemas de versiones y configuración manual.
+
+### Máquinas virtuales
+
+Proporcionan aislamiento, pero son más pesadas, tardan más en arrancar y complican el flujo de desarrollo frente a Docker.
+
+### Kubernetes
+
+Es una opción válida para sistemas de mayor escala, pero se considera excesiva para el alcance académico y local del proyecto. Docker Compose cubre suficientemente las necesidades actuales.
+
+## Operaciones habituales
+
+Levantar el sistema:
+
+```bash
+docker compose up -d --build
+```
+
+Ver el estado de los servicios:
+
+```bash
+docker compose ps
+```
+
+Ver logs de la API:
+
+```bash
+docker compose logs -f api
+```
+
+Ejecutar pruebas internas:
+
+```bash
+docker compose exec api pytest -v --cov=app --cov-report=term-missing
+```
+
+Detener el sistema:
+
+```bash
+docker compose down
+```
+
+Detener el sistema y borrar volúmenes:
+
+```bash
+docker compose down -v
+```
+
+## Estado de implementación
+
+El repositorio incluye un archivo `docker-compose.yml` en la raíz.
+
+Este archivo define los servicios necesarios para ejecutar NewsRadar en local:
+
+- `api`
+- `db`
+- `mailhog`
+
+La documentación de ejecución se encuentra en:
+
+- `README.md`
+- `docs/quickstart.md`
+- `docs/deployment.md`
