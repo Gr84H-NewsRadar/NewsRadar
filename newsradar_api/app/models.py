@@ -34,6 +34,7 @@ alert_rss_channels = Table(
 
 class User(Base):
     """Usuario del sistema con roles (admin, gestor, lector)"""
+
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -69,6 +70,7 @@ class Role(Base):
 
 class Category(Base):
     """Categoría IPTC Media Topics de primer nivel"""
+
     __tablename__ = "categories"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -96,6 +98,7 @@ class InformationSource(Base):
 
 class RSSChannel(Base):
     """Canal RSS de un medio de comunicación asociado a una categoría"""
+
     __tablename__ = "rss_channels"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -120,6 +123,7 @@ class RSSChannel(Base):
 
 class Alert(Base):
     """Alerta de monitorización con palabras clave, categoría IPTC y expresión cron"""
+
     __tablename__ = "alerts"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -146,6 +150,7 @@ class Alert(Base):
 
 class NewsItem(Base):
     """Noticia capturada de un canal RSS que coincide con una alerta"""
+
     __tablename__ = "news_items"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -170,6 +175,7 @@ class NewsItem(Base):
 
 class Notification(Base):
     """Notificación generada cuando una alerta detecta noticias relevantes"""
+
     __tablename__ = "notifications"
 
     id = Column(Integer, primary_key=True, index=True)

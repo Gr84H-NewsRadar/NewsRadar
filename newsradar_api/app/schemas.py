@@ -8,17 +8,20 @@ from pydantic import BaseModel, EmailStr, Field, HttpUrl, field_validator
 
 class Token(BaseModel):
     """Token JWT de autenticación"""
+
     access_token: str
     token_type: str = "bearer"
 
 
 class TokenData(BaseModel):
     """Datos extraídos del token JWT"""
+
     email: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
     """Petición de login con email y contraseña"""
+
     email: EmailStr
     password: str
 
@@ -28,6 +31,7 @@ class LoginRequest(BaseModel):
 
 class Metric(BaseModel):
     """Métrica con nombre y valor numérico"""
+
     name: str = Field(..., min_length=1, max_length=80)
     value: float
 
@@ -37,6 +41,7 @@ class Metric(BaseModel):
 
 class RoleBase(BaseModel):
     """Rol base (admin, gestor, lector)"""
+
     name: str = Field(..., min_length=1, max_length=80)
 
 
@@ -60,6 +65,7 @@ class Role(RoleBase):
 
 class UserBase(BaseModel):
     """Usuario base con datos personales"""
+
     email: EmailStr
     first_name: str = Field(..., min_length=1, max_length=120)
     last_name: str = Field(..., min_length=1, max_length=120)
@@ -68,6 +74,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     """Creación de usuario con contraseña y roles"""
+
     password: str = Field(..., min_length=6, max_length=128)
     role_ids: List[int] = Field(default_factory=list)
 
@@ -95,6 +102,7 @@ class User(UserBase):
 
 class CategoryBase(BaseModel):
     """Categoría IPTC Media Topics"""
+
     name: str = Field(..., min_length=1, max_length=120)
     source: str = Field(default="IPTC", pattern=r"^(IPTC|iptc|medtop:\d{8})$")
 
@@ -120,6 +128,7 @@ class Category(CategoryBase):
 
 class InformationSourceBase(BaseModel):
     """Medio de comunicación o fuente oficial"""
+
     name: str = Field(..., min_length=1, max_length=120)
     url: HttpUrl
 
@@ -145,6 +154,7 @@ class InformationSource(InformationSourceBase):
 
 class RSSChannelBase(BaseModel):
     """Canal RSS de un medio asociado a una categoría"""
+
     url: HttpUrl
     category_id: int
 
@@ -172,12 +182,14 @@ class RSSChannel(RSSChannelBase):
 
 class AlertCategoryItem(BaseModel):
     """Item de categoría IPTC para alertas"""
+
     code: str = Field(..., min_length=1, max_length=60)
     label: str = Field(..., min_length=1, max_length=120)
 
 
 class AlertBase(BaseModel):
     """Alerta de monitorización con palabras clave y categoría"""
+
     name: str = Field(..., min_length=1, max_length=200)
     descriptors: List[str] = Field(default_factory=list)  # = keywords internamente
     categories: List[AlertCategoryItem] = Field(
@@ -260,6 +272,7 @@ class Alert(AlertBase):
 
 class NotificationBase(BaseModel):
     """Notificación generada por una alerta con métricas"""
+
     timestamp: datetime
     metrics: List[Metric] = Field(default_factory=list)
 
@@ -309,6 +322,7 @@ class Notification(NotificationBase):
 
 class StatsBase(BaseModel):
     """Estadísticas de procesamiento con métricas"""
+
     metrics: List[Metric] = Field(default_factory=list)
 
 
@@ -366,6 +380,7 @@ class Stats(StatsBase):
 
 class NewsItemBase(BaseModel):
     """Noticia capturada de un canal RSS"""
+
     title: str
     link: str
     description: Optional[str] = None
@@ -374,6 +389,7 @@ class NewsItemBase(BaseModel):
 
 class NewsItem(NewsItemBase):
     """Noticia completa con relaciones a canal, categoría y alerta"""
+
     id: int
     rss_channel_id: int
     category_id: Optional[int] = None
@@ -411,6 +427,7 @@ class ProcessingStats(BaseModel):
 
 class DashboardStats(BaseModel):
     """Estadísticas globales del dashboard"""
+
     total_sources: int
     total_news: int
     total_alerts: int
@@ -420,5 +437,6 @@ class DashboardStats(BaseModel):
 
 class SynonymRecommendation(BaseModel):
     """Recomendación de sinónimos para una palabra clave"""
+
     keyword: str
     synonyms: List[str]
