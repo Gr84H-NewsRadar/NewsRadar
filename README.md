@@ -18,12 +18,16 @@ Sistema de monitorización de noticias en medios de comunicación y fuentes ofic
 - [Tests y calidad](#tests-y-calidad)
 - [Documentación](#documentación)
 - [Trazabilidad](#trazabilidad)
+- [Correspondencia con los requisitos de entrega](#correspondencia-con-los-requisitos-de-entrega)
 
 ## Descripción
 
 NewsRadar permite escuchar canales RSS de medios de comunicación y fuentes oficiales, organizar la información en categorías IPTC y monitorizar palabras clave mediante alertas configurables. Cuando se detecta una noticia que coincide con una alerta, el sistema notifica al usuario por correo electrónico y por buzón interno.
 
 ## Ejecución del proyecto
+
+> ⚠️ Se ha preferido no depender de un único script `.sh`, ya que en Windows puede requerir Git Bash, permisos adicionales o configuración extra.  
+> Para mantener compatibilidad entre Windows, Linux y macOS, la ejecución se realiza directamente con Docker Compose y los pipelines de GitHub Actions.
 
 ### Requisitos previos
 
@@ -211,10 +215,30 @@ http://localhost:8000/docs
 
 Cobertura mínima exigida: **60 %**. La suite actual alcanza aproximadamente un **61 %** de cobertura.
 
-Con los contenedores levantados:
+Con los contenedores levantados, se puede ejecutar la suite interna completa:
 
 ```bash
 docker compose exec api pytest -v --cov=app --cov-report=term-missing
+```
+
+Este comando ejecuta todos los tests internos del proyecto, incluyendo `tests/test_api.py`.
+
+También se puede ejecutar únicamente `tests/test_api.py`:
+
+```bash
+docker compose exec api pytest tests/test_api.py -v
+```
+
+Para ejecutar un test concreto dentro de ese archivo:
+
+```bash
+docker compose exec api pytest tests/test_api.py::test_login_form -v
+```
+
+Para ejecutar `tests/test_api.py` sin cobertura:
+
+```bash
+docker compose exec api pytest tests/test_api.py -v --no-cov
 ```
 
 Métricas de calidad de código:
@@ -261,32 +285,32 @@ El score esperado es superior a **8.0/10**. En la ejecución actual, el proyecto
 
 ## Correspondencia con los requisitos de entrega
 
-Esta tabla resume dónde queda cubierta cada exigencia técnica y documental del enunciado dentro del repositorio NewsRadar.
+Para facilitar la revisión, se resume dónde se cubren en el repositorio los puntos principales del enunciado.
 
-| Exigencia del enunciado | Evidencia en este proyecto |
+| Punto revisado | Dónde verlo en el proyecto |
 | --- | --- |
-| Repositorio único y versionado | Todo el código, configuración y documentación se encuentra en este repositorio |
+| Repositorio único | Código, configuración y documentación están incluidos en este repositorio |
 | Clonado del proyecto | `git clone https://github.com/Gr84H-NewsRadar/NewsRadar.git` |
-| Construcción del sistema | `docker compose up --build` construye la imagen de la API definida en `newsradar_api/Dockerfile` |
-| Despliegue en entorno limpio | `docker compose up --build` levanta desde cero los servicios `api`, `db` y `mailhog` |
-| Ejecución de la aplicación | La aplicación queda disponible en `http://localhost:8000` |
-| Base de datos persistente | PostgreSQL 15 se ejecuta como servicio `db` en `docker-compose.yml` |
-| Servicio de correo en local | MailHog captura los correos de prueba en `http://localhost:8025` |
-| API REST documentada | FastAPI genera OpenAPI automáticamente en `http://localhost:8000/docs` |
-| Pruebas internas | `docker compose exec api pytest -v --cov=app --cov-report=term-missing` |
-| Verificación funcional externa | `cd devops_verifica-main && python run_tests.py --all` |
-| Cobertura de pruebas | `pytest-cov` genera el informe de cobertura y valida el umbral mínimo configurado |
+| Construcción | `docker compose up --build` construye la imagen definida en `newsradar_api/Dockerfile` |
+| Despliegue local | `docker compose up --build` levanta los servicios `api`, `db` y `mailhog` |
+| Ejecución de la aplicación | Aplicación disponible en `http://localhost:8000` |
+| Base de datos | PostgreSQL 15 como servicio `db` en `docker-compose.yml` |
+| Correo en entorno local | MailHog disponible en `http://localhost:8025` |
+| API REST | OpenAPI generado por FastAPI en `http://localhost:8000/docs` |
+| Tests internos | `docker compose exec api pytest -v --cov=app --cov-report=term-missing` |
+| Tests de verificación | `cd devops_verifica-main && python run_tests.py --all` |
+| Cobertura | `pytest-cov` en la suite de tests |
 | Calidad de código | `docker compose exec api pylint app/` y workflow de CI |
 | Integración continua | `.github/workflows/ci.yml` |
-| Empaquetado / distribución | `.github/workflows/cd.yml` |
-| Documentación de ejecución | `README.md` y `docs/quickstart.md` |
-| Documentación de despliegue | `docs/deployment.md` |
-| Arquitectura del sistema | `docs/architecture.md` |
-| Decisiones arquitectónicas | `docs/adr/` |
-| Especificación de requisitos | `docs/requirements.md` |
-| Planificación del desarrollo | `docs/planning.md` |
-| Trazabilidad de uso de IA generativa | `docs/prompts.md` |
-| Ejemplos de uso del API | `docs/api-examples.md` |
+| CD / empaquetado | `.github/workflows/cd.yml` |
+| Guía de ejecución | `README.md` y `docs/quickstart.md` |
+| Despliegue y operación | `docs/deployment.md` |
+| Arquitectura | `docs/architecture.md` |
+| ADRs | `docs/adr/` |
+| Requisitos | `docs/requirements.md` |
+| Planificación | `docs/planning.md` |
+| Uso de IA generativa | `docs/prompts.md` |
+| Ejemplos de API | `docs/api-examples.md` |
 
 ## Licencia
 
