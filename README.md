@@ -57,10 +57,8 @@ La estructura final debe ser similar a:
 ```text
 NewsRadar/
 ├── docker-compose.yml
-├── Makefile
 ├── newsradar_api/
 ├── docs/
-├── scripts/
 └── devops_verifica-main/
     ├── run_tests.py
     ├── requirements.txt
@@ -209,14 +207,13 @@ Lista completa: http://localhost:8000/docs
 Cobertura mínima exigida y verificada en CI: **60 %**.
 
 ```bash
-make test                  # Suite completa con cobertura
-docker-compose exec api pytest -v   # Solo tests
+docker compose exec api pytest -v --cov=app --cov-report=term-missing
 ```
 
 Métricas de calidad de código:
 
 ```bash
-docker-compose exec api pylint app/   # Score esperado ≥ 8.0
+docker compose exec api pylint app/
 ```
 
 ## Documentación
