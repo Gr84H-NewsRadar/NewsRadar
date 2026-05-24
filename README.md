@@ -259,6 +259,35 @@ El score esperado es superior a **8.0/10**. En la ejecución actual, el proyecto
 | RF17      | `main.py::list_news` con filtros                  | —                                 | #26   |
 | RNF01-12  | Ver [`docs/`](docs/) y workflows de CI/CD         | —                                 | #1-21 |
 
+## Correspondencia con los requisitos de entrega
+
+Esta tabla resume dónde queda cubierta cada exigencia técnica y documental del enunciado dentro del repositorio NewsRadar.
+
+| Exigencia del enunciado | Evidencia en este proyecto |
+| --- | --- |
+| Repositorio único y versionado | Todo el código, configuración y documentación se encuentra en este repositorio |
+| Clonado del proyecto | `git clone https://github.com/Gr84H-NewsRadar/NewsRadar.git` |
+| Construcción del sistema | `docker compose up --build` construye la imagen de la API definida en `newsradar_api/Dockerfile` |
+| Despliegue en entorno limpio | `docker compose up --build` levanta desde cero los servicios `api`, `db` y `mailhog` |
+| Ejecución de la aplicación | La aplicación queda disponible en `http://localhost:8000` |
+| Base de datos persistente | PostgreSQL 15 se ejecuta como servicio `db` en `docker-compose.yml` |
+| Servicio de correo en local | MailHog captura los correos de prueba en `http://localhost:8025` |
+| API REST documentada | FastAPI genera OpenAPI automáticamente en `http://localhost:8000/docs` |
+| Pruebas internas | `docker compose exec api pytest -v --cov=app --cov-report=term-missing` |
+| Verificación funcional externa | `cd devops_verifica-main && python run_tests.py --all` |
+| Cobertura de pruebas | `pytest-cov` genera el informe de cobertura y valida el umbral mínimo configurado |
+| Calidad de código | `docker compose exec api pylint app/` y workflow de CI |
+| Integración continua | `.github/workflows/ci.yml` |
+| Empaquetado / distribución | `.github/workflows/cd.yml` |
+| Documentación de ejecución | `README.md` y `docs/quickstart.md` |
+| Documentación de despliegue | `docs/deployment.md` |
+| Arquitectura del sistema | `docs/architecture.md` |
+| Decisiones arquitectónicas | `docs/adr/` |
+| Especificación de requisitos | `docs/requirements.md` |
+| Planificación del desarrollo | `docs/planning.md` |
+| Trazabilidad de uso de IA generativa | `docs/prompts.md` |
+| Ejemplos de uso del API | `docs/api-examples.md` |
+
 ## Licencia
 
 MIT. Ver [`LICENSE`](LICENSE).
