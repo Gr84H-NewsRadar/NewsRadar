@@ -21,7 +21,7 @@ Sistema de monitorización de noticias en medios de comunicación y fuentes ofic
 
 ## Descripción
 
-NewsRadar permite escuchar canales RSS de medios de comunicación y fuentes oficiales, organizar la información en categorías IPTC, y monitorizar palabras clave mediante alertas configurables. Cuando se detecta una noticia que coincide con una alerta, el sistema notifica al usuario por correo y por buzón interno.
+NewsRadar permite escuchar canales RSS de medios de comunicación y fuentes oficiales, organizar la información en categorías IPTC y monitorizar palabras clave mediante alertas configurables. Cuando se detecta una noticia que coincide con una alerta, el sistema notifica al usuario por correo electrónico y por buzón interno.
 
 ## Ejecución del proyecto
 
@@ -35,6 +35,7 @@ Antes de ejecutar el proyecto, asegúrate de tener instalado y abierto:
 - Git
 
 > Si Docker Desktop no está abierto, puede aparecer un error similar a:
+>
 > ```bash
 > failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
 > ```
@@ -157,14 +158,14 @@ docker compose down -v
 
 ## Funcionalidades
 
-| Objetivo | Funcionalidad                                                                      |
-| -------- | ---------------------------------------------------------------------------------- |
-| 1        | Gestión de alertas (hasta 20 por usuario) con descriptores y categoría IPTC        |
-| 2        | Clasificación automática de noticias en categorías IPTC primer nivel               |
-| 3        | Notificaciones a buzón interno y correo electrónico                                |
-| 4        | Gestión de fuentes (10 medios, 100+ canales RSS, 17 categorías IPTC cubiertas)     |
-| 5        | Roles `admin`, `manager` (gestor) y `reader` (lector) con permisos diferenciados   |
-| 6        | Dashboard con estadísticas globales, nubes de palabras y panel UI completo         |
+| Objetivo | Funcionalidad                                                                 |
+| -------- | ----------------------------------------------------------------------------- |
+| 1        | Gestión de alertas hasta 20 por usuario, con descriptores y categoría IPTC    |
+| 2        | Clasificación automática de noticias en categorías IPTC de primer nivel       |
+| 3        | Notificaciones a buzón interno y correo electrónico                           |
+| 4        | Gestión de fuentes con 10 medios, más de 100 canales RSS y cobertura IPTC     |
+| 5        | Roles `admin` y `manager`/gestor, con soporte de API para gestión de roles    |
+| 6        | Dashboard con estadísticas globales, nubes de palabras y panel UI completo    |
 
 ## Arquitectura
 
@@ -172,21 +173,21 @@ Arquitectura de 5 capas como exige el enunciado:
 
 1. **Capa de presentación** — Frontend HTML/JS/Bootstrap servido por FastAPI en `/static/`.
 2. **Capa de API REST** — FastAPI con OpenAPI 3.1 documentado en `/docs`.
-3. **Capa de lógica de negocio** — Servicios Python (rss_processor, synonym_service, email_service).
-4. **Capa de persistencia** — SQLAlchemy + PostgreSQL.
+3. **Capa de lógica de negocio** — Servicios Python: procesamiento RSS, sinónimos, autenticación, notificaciones y dashboard.
+4. **Capa de persistencia** — SQLAlchemy sobre PostgreSQL.
 5. **Capa de datos** — PostgreSQL 15 en contenedor.
 
 Decisiones arquitectónicas documentadas en [`docs/adr/`](docs/adr/):
 
-- ADR 001: Uso de FastAPI como framework
-- ADR 002: PostgreSQL como sistema de persistencia
-- ADR 003: Despliegue mediante Docker
+- ADR 001: Uso de FastAPI como framework.
+- ADR 002: Uso de PostgreSQL como sistema de persistencia.
+- ADR 003: Despliegue mediante Docker Compose.
 
 ## API REST
 
 API REST documentada con OpenAPI. Endpoints principales:
 
-```
+```text
 GET  /api/v1/health
 POST /api/v1/auth/login
 POST /api/v1/auth/register
@@ -200,11 +201,17 @@ GET  /api/v1/dashboard/stats
 GET  /api/v1/dashboard/wordcloud?category_id=...
 ```
 
-Lista completa: http://localhost:8000/docs
+Lista completa:
+
+```text
+http://localhost:8000/docs
+```
 
 ## Tests y calidad
 
-Cobertura mínima exigida y verificada en CI: **60 %**.
+Cobertura mínima exigida: **60 %**. La suite actual alcanza aproximadamente un **61 %** de cobertura.
+
+Con los contenedores levantados:
 
 ```bash
 docker compose exec api pytest -v --cov=app --cov-report=term-missing
@@ -216,36 +223,38 @@ Métricas de calidad de código:
 docker compose exec api pylint app/
 ```
 
+El score esperado es superior a **8.0/10**. En la ejecución actual, el proyecto obtiene aproximadamente **9.11/10**.
+
 ## Documentación
 
-| Documento                                                | Contenido                                                  |
-| -------------------------------------------------------- | ---------------------------------------------------------- |
-| [`docs/quickstart.md`](docs/quickstart.md)               | Guía rápida de inicio                                      |
-| [`docs/deployment.md`](docs/deployment.md)               | Despliegue, CI/CD, rollback, troubleshooting               |
-| [`docs/architecture.md`](docs/architecture.md)           | Diagramas de arquitectura y flujos                         |
-| [`docs/api-examples.md`](docs/api-examples.md)           | Ejemplos de uso del API                                    |
-| [`docs/adr/`](docs/adr/)                                 | Decisiones arquitectónicas (ADRs)                          |
+| Documento                                      | Contenido                                      |
+| ---------------------------------------------- | ---------------------------------------------- |
+| [`docs/quickstart.md`](docs/quickstart.md)     | Guía rápida de inicio                          |
+| [`docs/deployment.md`](docs/deployment.md)     | Despliegue, CI/CD, rollback y troubleshooting  |
+| [`docs/architecture.md`](docs/architecture.md) | Arquitectura, componentes y flujos principales |
+| [`docs/api-examples.md`](docs/api-examples.md) | Ejemplos de uso del API                        |
+| [`docs/adr/`](docs/adr/)                       | Decisiones arquitectónicas                     |
 
 ## Trazabilidad
 
-| Requisito | Implementación                                       | Tests asociados                  | Issue |
-| --------- | ---------------------------------------------------- | -------------------------------- | ----- |
-| RF01      | `auth.py`, `email_service.py`                        | `test_api.py::test_register`     | #5    |
-| RF02      | `auth.py::create_access_token`                       | `test_api.py::test_login`        | #6    |
-| RF03      | `main.py` endpoints `/users/{id}/alerts`             | `test_api.py::test_alerts_*`     | #10   |
-| RF04      | `synonym_service.py`                                 | `test_api.py::test_synonyms`     | #11   |
-| RF05      | `main.py` endpoints `/information-sources/*`         | `test_api.py::test_sources_*`    | #8    |
-| RF06      | `rss_processor.py::process_rss_channels`             | `test_api.py::test_rss`          | #12   |
-| RF08      | `models.py::Category` con código IPTC                | —                                | #13   |
-| RF09      | `rss_processor.py::create_alert_notification`        | `test_api.py::test_notifications`| #14   |
-| RF10      | `models.py::Alert.notify_email/notify_inbox`         | —                                | #15   |
-| RF11      | `email_service.py::send_alert_notification`          | —                                | #16   |
-| RF13      | `main.py::get_dashboard_stats` + `dashboard.html`    | —                                | #23   |
-| RF14      | `main.py::get_wordcloud` + `wordcloud.html`          | —                                | #24   |
-| RF15      | `auth.py::require_manager`                           | `test_api.py::test_rbac`         | #7    |
-| RF16      | Frontend completo en `app/static/`                   | —                                | #25   |
-| RF17      | `main.py::list_news` con filtros                     | —                                | #26   |
-| RNF01-12  | Ver [`docs/`](docs/) y workflows de CI/CD            | —                                | #1-21 |
+| Requisito | Implementación                                    | Tests asociados                   | Issue |
+| --------- | ------------------------------------------------- | --------------------------------- | ----- |
+| RF01      | `auth.py`, `email_service.py`                     | `test_api.py::test_register`      | #5    |
+| RF02      | `auth.py::create_access_token`                    | `test_api.py::test_login`         | #6    |
+| RF03      | `main.py` endpoints `/users/{id}/alerts`          | `test_api.py::test_alerts_*`      | #10   |
+| RF04      | `synonym_service.py`                              | `test_api.py::test_synonyms`      | #11   |
+| RF05      | `main.py` endpoints `/information-sources/*`      | `test_api.py::test_sources_*`     | #8    |
+| RF06      | `rss_processor.py::process_rss_channels`          | `test_api.py::test_rss`           | #12   |
+| RF08      | `models.py::Category` con código IPTC             | —                                 | #13   |
+| RF09      | `rss_processor.py::create_alert_notification`     | `test_api.py::test_notifications` | #14   |
+| RF10      | `models.py::Alert.notify_email/notify_inbox`      | —                                 | #15   |
+| RF11      | `email_service.py::send_alert_notification`       | —                                 | #16   |
+| RF13      | `main.py::get_dashboard_stats` + `dashboard.html` | —                                 | #23   |
+| RF14      | `main.py::get_wordcloud` + `wordcloud.html`       | —                                 | #24   |
+| RF15      | `auth.py::require_manager`                        | `test_api.py::test_rbac`          | #7    |
+| RF16      | Frontend completo en `app/static/`                | —                                 | #25   |
+| RF17      | `main.py::list_news` con filtros                  | —                                 | #26   |
+| RNF01-12  | Ver [`docs/`](docs/) y workflows de CI/CD         | —                                 | #1-21 |
 
 ## Licencia
 
