@@ -50,6 +50,8 @@ Los pipelines viven en:
 - `.github/workflows/ci.yml` — Tests, lint, calidad y cobertura.
 - `.github/workflows/cd.yml` — Build y publicación de artefactos al crear un tag.
 
+Las operaciones de construcción, ejecución, pruebas y despliegue se automatizan mediante `docker-compose.yml` y GitHub Actions, evitando scripts duplicados que puedan quedar desactualizados.
+
 ## Entornos
 
 | Entorno | URL | Base de datos | Notas |
