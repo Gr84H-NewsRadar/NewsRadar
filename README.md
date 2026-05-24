@@ -233,6 +233,9 @@ El score esperado es superior a **8.0/10**. En la ejecución actual, el proyecto
 | [`docs/deployment.md`](docs/deployment.md)     | Despliegue, CI/CD, rollback y troubleshooting  |
 | [`docs/architecture.md`](docs/architecture.md) | Arquitectura, componentes y flujos principales |
 | [`docs/api-examples.md`](docs/api-examples.md) | Ejemplos de uso del API                        |
+| [`docs/requirements.md`](docs/requirements.md) | Especificación final de requisitos y trazabilidad |
+| [`docs/planning.md`](docs/planning.md)         | Planificación, sprints, milestones y tablero Kanban |
+| [`docs/prompts.md`](docs/prompts.md)           | Trazabilidad del uso de IA generativa          |
 | [`docs/adr/`](docs/adr/)                       | Decisiones arquitectónicas                     |
 
 ## Trazabilidad
