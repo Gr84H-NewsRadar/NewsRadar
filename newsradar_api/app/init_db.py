@@ -20,10 +20,29 @@ def migrate_schema(db: Session):
                     "ALTER TABLE processing_stats ADD COLUMN IF NOT EXISTS metrics JSON"
                 )
             )
+            db.execute(
+                text(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS telefono VARCHAR(9) NOT NULL DEFAULT '000000000'"
+                )
+            )
+            db.execute(
+                text("UPDATE users SET telefono = '000000000' WHERE telefono IS NULL")
+            )
         elif dialect == "sqlite":
             columns = db.execute(text("PRAGMA table_info(processing_stats)")).fetchall()
             if "metrics" not in {row[1] for row in columns}:
                 db.execute(text("ALTER TABLE processing_stats ADD COLUMN metrics JSON"))
+            user_columns = db.execute(text("PRAGMA table_info(users)")).fetchall()
+            if "telefono" not in {row[1] for row in user_columns}:
+                db.execute(
+                    text(
+                        "ALTER TABLE users ADD COLUMN telefono VARCHAR(9) NOT NULL DEFAULT '000000000'"
+                    )
+                )
+            else:
+                db.execute(
+                    text("UPDATE users SET telefono = '000000000' WHERE telefono IS NULL")
+                )
         db.commit()
     except Exception as exc:
         db.rollback()
@@ -120,6 +139,7 @@ def init_admin_user(db: Session):
             first_name="Admin",
             last_name="NewsRadar",
             organization="NewsRadar",
+            telefono="000000000",
             hashed_password=get_password_hash("admin123"),
             is_active=True,
             is_verified=True,

@@ -15,6 +15,7 @@ async function loadProfile() {
         document.getElementById('p-lastname').value = me.last_name;
         document.getElementById('p-email').value = me.email;
         document.getElementById('p-org').value = me.organization;
+        document.getElementById('p-phone').value = me.telefono || '';
 
         // Roles
         const rolesList = document.getElementById('roles-list');
@@ -31,7 +32,8 @@ async function saveProfile() {
     const data = {
         first_name: document.getElementById('p-firstname').value,
         last_name: document.getElementById('p-lastname').value,
-        organization: document.getElementById('p-org').value
+        organization: document.getElementById('p-org').value,
+        telefono: document.getElementById('p-phone').value
     };
     const msg = document.getElementById('profile-msg');
     msg.classList.add('d-none');

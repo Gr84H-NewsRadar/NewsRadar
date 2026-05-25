@@ -42,6 +42,7 @@ class User(Base):
     first_name = Column(String(120), nullable=False)
     last_name = Column(String(120), nullable=False)
     organization = Column(String(180), nullable=False)
+    telefono = Column(String(9), nullable=False)
     hashed_password = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=False)
     is_verified = Column(Boolean, default=False)

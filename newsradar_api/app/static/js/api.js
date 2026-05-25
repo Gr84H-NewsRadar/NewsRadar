@@ -5,6 +5,22 @@ const API_BASE = '/api/v1';
 const api = {
     _token: () => localStorage.getItem('access_token'),
 
+    _errorMessage: (data, fallback) => {
+        if (!data) return fallback;
+        if (typeof data === 'string') return data;
+        if (Array.isArray(data.detail)) {
+            return data.detail
+                .map(item => item?.msg || item?.message || JSON.stringify(item))
+                .join(' | ');
+        }
+        if (typeof data.detail === 'string') return data.detail;
+        if (data.detail && typeof data.detail === 'object') {
+            return data.detail.message || data.detail.msg || JSON.stringify(data.detail);
+        }
+        if (typeof data.message === 'string') return data.message;
+        return fallback;
+    },
+
     _headers: (auth = true) => {
         const h = { 'Content-Type': 'application/json' };
         if (auth && api._token()) h['Authorization'] = `Bearer ${api._token()}`;
@@ -22,7 +38,7 @@ const api = {
             let msg = `Error ${resp.status}`;
             try {
                 const data = await resp.json();
-                msg = data.message || data.detail?.message || data.detail || msg;
+                msg = api._errorMessage(data, msg);
             } catch (e) {}
             throw new Error(msg);
         }

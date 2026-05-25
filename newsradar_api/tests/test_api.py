@@ -29,6 +29,21 @@ app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
 
+_client_post = client.post
+
+
+def _post_with_default_phone(url, *args, **kwargs):
+    json_data = kwargs.get("json")
+    if url in {"/api/v1/auth/register", "/api/v1/users"} and isinstance(json_data, dict):
+        payload = dict(json_data)
+        payload.setdefault("telefono", "123456789")
+        kwargs["json"] = payload
+    return _client_post(url, *args, **kwargs)
+
+
+client.post = _post_with_default_phone
+
+
 def _mark_user_verified(email: str):
     db = TestingSessionLocal()
     try:
@@ -87,6 +102,7 @@ def test_register_user():
     assert response.status_code == 201
     data = response.json()
     assert data["email"] == "newuser123@example.com"
+    assert data["telefono"] == "123456789"
     assert "id" in data
 
     db = TestingSessionLocal()
@@ -96,6 +112,22 @@ def test_register_user():
         assert user.is_verified is False
     finally:
         db.close()
+
+
+def test_register_user_rejects_invalid_phone_format():
+    response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "badphone@example.com",
+            "first_name": "Bad",
+            "last_name": "Phone",
+            "organization": "Test Org",
+            "telefono": "123",
+            "password": "testpass123",
+            "role_ids": [],
+        },
+    )
+    assert response.status_code == 422
 
 
 def test_unverified_user_cannot_login():
