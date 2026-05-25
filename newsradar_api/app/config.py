@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     # RSS Processing
     RSS_FETCH_TIMEOUT: int = 30
-    MAX_ALERTS_PER_USER: int = 20
+    MAX_ALERTS_PER_USER: int = 2
     MIN_SYNONYMS: int = 3
     MAX_SYNONYMS: int = 10
 
