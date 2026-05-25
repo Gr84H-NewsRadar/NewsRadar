@@ -11,6 +11,13 @@ from app import models
 from app.config import settings
 from app.database import get_db
 
+EMAIL_NOT_VERIFIED_MESSAGE = "Please verify your email before logging in"
+
+
+class EmailNotVerifiedError(Exception):
+    """Raised when credentials are valid but the email is not verified."""
+
+
 # Contexto para hashear contraseñas con bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -74,14 +81,15 @@ def get_current_user(
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
 
+    if not user.is_verified:
+        raise EmailNotVerifiedError()
+
     return user
 
 
 def get_current_active_user(
     current_user: models.User = Depends(get_current_user),
 ) -> models.User:
-    if not current_user.is_verified:
-        raise HTTPException(status_code=400, detail="Email not verified")
     return current_user
 
 

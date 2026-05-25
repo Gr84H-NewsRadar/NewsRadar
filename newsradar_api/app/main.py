@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import logging
 import os
 import re
@@ -10,13 +11,15 @@ from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.auth import (
+    EMAIL_NOT_VERIFIED_MESSAGE,
+    EmailNotVerifiedError,
     create_access_token,
     get_current_user,
     get_password_hash,
@@ -52,8 +55,19 @@ app.add_middleware(
 
 API_PREFIX = "/api/v1"
 rss_scheduler_lock = asyncio.Lock()
+VERIFICATION_TOKEN_HASH_PREFIX = "sha256:"
+
+
+@app.exception_handler(EmailNotVerifiedError)
+async def email_not_verified_handler(request: Request, exc: EmailNotVerifiedError):
+    return JSONResponse(
+        status_code=403,
+        content={"status": "error", "message": EMAIL_NOT_VERIFIED_MESSAGE},
+    )
+
 
 # Catálogo IPTC Media Topics de primer nivel (17 categorías)
+
 IPTC_CATALOG = {
     "01000000": "Artes, cultura, entretenimiento y medios",
     "02000000": "Policía y justicia",
@@ -136,6 +150,27 @@ def _validate_user_roles(
     return [role]
 
 
+def _hash_verification_token(token: str) -> str:
+    return (
+        f"{VERIFICATION_TOKEN_HASH_PREFIX}"
+        f"{hashlib.sha256(token.encode('utf-8')).hexdigest()}"
+    )
+
+
+def _find_user_by_verification_token(db: Session, token: str) -> Optional[models.User]:
+    token_hash = _hash_verification_token(token)
+    user = (
+        db.query(models.User)
+        .filter(models.User.verification_token == token_hash)
+        .first()
+    )
+    if user:
+        return user
+
+    # Backward compatibility for tokens created before hashing was introduced.
+    return db.query(models.User).filter(models.User.verification_token == token).first()
+
+
 def _authenticate_user(db: Session, email: str, password: str) -> models.User:
     """Autentica usuario por email y contraseña. Lanza excepción si falla"""
     user = (
@@ -151,6 +186,8 @@ def _authenticate_user(db: Session, email: str, password: str) -> models.User:
         )
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
+    if not user.is_verified:
+        raise EmailNotVerifiedError()
     return user
 
 
@@ -446,7 +483,7 @@ async def register(
         hashed_password=get_password_hash(user_data.password),
         is_active=True,
         is_verified=False,
-        verification_token=verification_token,
+        verification_token=_hash_verification_token(verification_token),
         verification_token_expires=datetime.utcnow() + timedelta(hours=24),
     )
     user.roles = _validate_user_roles(db, user_data.role_ids)
@@ -465,12 +502,12 @@ def get_current_user_info(current_user: models.User = Depends(get_current_user))
 
 @app.get(f"{API_PREFIX}/auth/verify", tags=["auth"])
 def verify_email(token: str = Query(..., min_length=1), db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.verification_token == token).first()
+    user = _find_user_by_verification_token(db, token)
     if not user:
         raise HTTPException(status_code=400, detail="Invalid verification token")
 
     expires_at = user.verification_token_expires
-    if expires_at and expires_at.replace(tzinfo=None) < datetime.utcnow():
+    if not expires_at or expires_at.replace(tzinfo=None) < datetime.utcnow():
         raise HTTPException(status_code=400, detail="Verification token expired")
 
     user.is_verified = True
@@ -528,7 +565,7 @@ async def create_user(
         hashed_password=get_password_hash(user_data.password),
         is_active=True,
         is_verified=False,
-        verification_token=verification_token,
+        verification_token=_hash_verification_token(verification_token),
         verification_token_expires=datetime.utcnow() + timedelta(hours=24),
     )
     user.roles = _validate_user_roles(db, user_data.role_ids)

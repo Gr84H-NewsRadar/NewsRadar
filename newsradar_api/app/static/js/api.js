@@ -22,7 +22,7 @@ const api = {
             let msg = `Error ${resp.status}`;
             try {
                 const data = await resp.json();
-                msg = data.detail || msg;
+                msg = data.message || data.detail?.message || data.detail || msg;
             } catch (e) {}
             throw new Error(msg);
         }

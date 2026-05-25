@@ -73,9 +73,9 @@
 
             try {
                 await api.register(data);
-                okBox.textContent = 'Cuenta creada. Revisa tu correo para verificarla. Redirigiendo al login...';
+                okBox.textContent = 'A verification email has been sent. Please check your inbox before logging in.';
                 okBox.classList.remove('d-none');
-                setTimeout(() => window.location.href = '/static/index.html', 2500);
+                document.getElementById('register-form').classList.add('d-none');
             } catch (err) {
                 errBox.textContent = err.message || 'Error al crear cuenta';
                 errBox.classList.remove('d-none');
