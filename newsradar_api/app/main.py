@@ -66,7 +66,7 @@ async def email_not_verified_handler(request: Request, exc: EmailNotVerifiedErro
     )
 
 
-# Catálogo IPTC Media Topics de primer nivel (17 categorías)
+# Catálogo IPTC Media Topics de primer nivel (18 categorías)
 
 IPTC_CATALOG = {
     "01000000": "Artes, cultura, entretenimiento y medios",
@@ -80,6 +80,7 @@ IPTC_CATALOG = {
     "09000000": "Mano de obra",
     "10000000": "Estilo de vida y tiempo libre",
     "11000000": "Política",
+    "11110000": "Sucesos",
     "12000000": "Religión y culto",
     "13000000": "Ciencia y tecnología",
     "14000000": "Sociedad",
